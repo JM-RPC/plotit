@@ -1,0 +1,870 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Apr  2 15:45:31 2024
+
+@author: JM-RPC
+"""
+#import pdb; pdb.set_trace()
+from sklearn.metrics import roc_curve, auc
+import statsmodels as sm
+import statsmodels.formula.api as smf
+from statsmodels.graphics.regressionplots import plot_partregress_grid, plot_leverage_resid2, influence_plot, plot_fit
+from scipy import stats
+import numpy as np
+import pandas as pd
+import io
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sb
+from mpl_toolkits.mplot3d import Axes3D
+import plotly.express as pltx
+from shiny import App, Inputs, Outputs, Session, reactive, render, ui
+from shiny.types import FileInfo
+import shinywidgets
+from shinywidgets import render_widget, output_widget
+import plotly.express as pltx
+import plotly.graph_objs as go
+from shinywidgets import output_widget, render_widget
+import os
+import signal
+#import nest_asyncio
+
+
+#from shinywidgets import output_widget, render_widget
+
+max_factor_values = 25
+
+basecolors0 = ['red',  'blue', 'green', 'goldenrod', 'violet','cyan', 'yellow','grey','gold','magenta','silver','orange','olive','khaki','thistle']
+basecolorsalpha = ['red',  'blue', 'green', 'goldenrod', 'violet','cyan', 'yellow','grey','gold','magenta']
+basecolors = [matplotlib.colors.to_rgba(item,alpha = None) for item in basecolorsalpha]
+protected_names = ['Residuals','Predictions','Deviance_Resid']
+
+def getcolor(col_data):
+    dfc = pd.DataFrame(col_data).astype('str')
+    choicesCo = list(dfc[dfc.columns[0]].astype('str').unique())
+    choicesCo.sort()
+    if (len(choicesCo) < len(basecolors)):
+        colorD = {item : basecolors[choicesCo.index(item)]  for item in choicesCo}
+        colorlist = [colorD[item] for item in col_data]
+        lpatches = [mpatches.Patch(color = colorD[item],label = item) for item in colorD.keys()]
+    else:
+        cmap = plt.cm.plasma
+        #colorNos = [choicesCo.index(item) for item in col_data]
+        colorD = {item : cmap(choicesCo.index(item)/len(choicesCo)) for item in choicesCo}
+        colorlist = [colorD[item] for item in col_data]
+        lpatches = [mpatches.Patch(color = colorD[item],label = item) for item in choicesCo]
+    return colorlist, lpatches, colorD
+
+def collisionAvoidance(name,namelist):
+    while name in namelist: 
+        name = name + '_0'        
+    return(name)
+
+
+def doCorr(xv, yv, **kws):
+    r,p = stats.pearsonr(xv,yv)
+    ax = plt.gca()
+    ax.annotate("r = {:.3f}, p = {:.3f}".format(r,p),xy=(.1, .9), xycoords=ax.transAxes)
+
+
+
+
+app_ui = ui.page_navbar( 
+    ui.nav_panel("Input",
+        ui.input_file("file1", "Choose .csv or .dta File", accept=[".csv",".CSV",".dta",".DTA"], multiple=False, placeholder = ''),
+        ui.output_text('io_mess'),ui.input_radio_buttons('killna', 'Remove rows with missing data in one or more columns?',choices = ['No','Yes']),
+        ui.output_text_verbatim("info"), 
+        ui.output_table("summary"),
+        ),
+    ui.nav_panel("Correlations",
+                 ui.row(ui.input_selectize("corrV","Select variables:",choices = [''],multiple = True,width = "200px")),
+                 ui.output_plot("dataPD",width = '1200px', height = '1200px'),
+                 ),
+    ui.nav_panel("Plotting",
+                 ui.row(
+                     ui.output_text("plt_mess",inline = True)
+                     ),
+                 ui.row(
+                     ui.input_radio_buttons("datachoose","Data:",choices = ['Input Data'], selected = 'Input Data', inline = True),
+                     ),
+                 ui.row(
+                     ui.column(2,offset=0,*[ ui.input_selectize("xvar","X variable:",choices = ['-'], multiple=False)]),
+                     ui.column(2,offset=0,*[ ui.input_selectize("yvar","Y variable:",choices = ['-'], multiple=False)]),
+                     ui.column(2,offset=0,*[ ui.input_selectize("zvar","Z variable:",choices = ['-'], multiple=False)]),
+                     ui.column(2,offset=0,*[ ui.input_selectize("cvar","Color with:",choices = ['-'], multiple=False)]),
+                     ),
+                 ui.row(
+                     ui.column(1,offset=0,*[ui.input_action_button("updateB", "Update")]),
+                     ui.column(1,offset=0),
+                     ui.output_ui("pltopts"),
+                     ui.column(1,offset=0),
+                     ui.column(3,offset = 0,*[ui.download_button("downloadDP","Save Plotting Data",width = "200px")]),
+                     
+                     ),
+                 ui.row(ui.output_ui("grphopts"),
+                     ),
+                 ui.row(
+                     ui.input_selectize("fvar","Filter on:" ,choices = ['-'], multiple=False),
+                     ui.input_selectize("fitems","Included Rows:",choices = ['-'], multiple=True),
+                     ),
+                 ui.row(
+                        ui.HTML("<p>Rows Selected (filter on \"-\" above to clear filter).</p>"),
+                        ui.input_text("titleplt","Plot Title:", value = '-', width = '800px', )
+                     ),
+                 ui.row(
+                     ui.output_text_verbatim("log")
+                     ),
+                 ui.row(ui.HTML("<p>These bounds override plot bounds.  To reset reselect the variable.</p>")
+                     ),
+                 ui.row(
+                     ui.column(2,offset=0,*[ ui.input_numeric("xlb", "X lower bound:", value="",width=10)]),
+                     ui.column(2,offset=0,*[ ui.input_numeric("xub", "X upper bound:", value="",width=10)]),
+                     ui.column(2,offset=0,*[ ui.input_numeric("ylb", "Y lower bound:", value="",width=10)]),
+                     ui.column(2,offset=0,*[ ui.input_numeric("yub", "Y upper bound:", value="",width=10)]),
+                     ui.column(2,offset=0,*[ ui.input_numeric("zlb", "Z lower bound:", value="",width=10)]),
+                     ui.column(2,offset=0,*[ ui.input_numeric("zub", "Z upper bound:", value="",width=10)]),
+                     ),
+                 ),
+    # ui.nav_panel("Plot Extras",
+    #              ui.row(
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("y1var","Y1 variable:",choices = ['-'], multiple=False)]),
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("y2var","Y2 variable:",choices = ['-'], multiple=False)]),
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("z1var","Z1 variable:",choices = ['-'], multiple=False)]),
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("z2var","Z2 variable:",choices = ['-'], multiple=False)]),
+    #                  ),
+    #              ui.row(
+    #                  ui.column(3,offset=0,*[ ui.input_radio_buttons("y1mark","Type:",choices = ['dot','line'],inline = True)]),                    
+    #                  ui.column(3,offset=0,*[ ui.input_radio_buttons("y2mark","Type:",choices = ['dot','line'],inline = True)]),
+    #                  ui.column(3,offset=0,*[ ui.input_radio_buttons("z1mark","Type:",choices = ['dot','line'],inline = True)]),
+    #                  ui.column(3,offset=0,*[ ui.input_radio_buttons("z1mark","Type:",choices = ['dot','line'],inline = True)]),
+    #                  ),
+    #              ui.row(
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("y1col","Color",choices = basecolors0, multiple = False)]),                    
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("y2col","Color",choices = basecolors0, multiple = False)]),                    
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("z1col","Color",choices = basecolors0, multiple = False)]),                    
+    #                  ui.column(3,offset=0,*[ ui.input_selectize("z2col","Color",choices = basecolors0, multiple = False)]),                    
+    #                  ),
+    #              ),
+    ui.nav_panel("Linear Models",
+                 ui.row(
+                     ui.column(3, offset = 0, *[ui.input_selectize("depvar","Dependent variable:",choices = ['-'],multiple = False)]),
+                     ui.column(5, offset = 0, *[ui.input_selectize("indvar","Independent Variables:", choices = ['-'],multiple = True)]),
+                     ui.column(4, offset = 0, *[ui.input_selectize("tofactor","Convert Numeric Variables to factors:", choices = ['-'],multiple = True)]),
+                     ),
+                 ui.row(ui.HTML("<p> Use Wilkinson/Patsy notation to specify variable transformations.</p>")
+                     ),
+                 ui.row(
+                     ui.column(9, offset = 0, *[ui.input_text('stringM','Model String:',width = '1000px')]),
+                     ui.column(3, offset = 0, *[ui.input_action_button('modelGo',"Run Model")]),
+                     ),
+                 ui.row(
+                     ui.output_ui("dloads"),
+                     ),
+                 ui.row(
+                     ui.output_text_verbatim("modelSummary")
+                     ),
+                 ),
+    ui.nav_panel("Linear Models: Standard Plots",
+                  ui.row(
+                      ui.column(6,offset=0,*[ui.input_radio_buttons("regplotR","Plot: ",choices = ['ROC', 'Leverage','Partial Regression','Influence','Fit'],inline = True)]),
+                      ui.column(6,offset=0,*[ui.input_select("lmsp","Fit: Ind. Var:",choices = ['-'])]),
+                      ),
+                  ui.row(
+                      ui.output_plot("regplot1", width = "900px", height = "600px")
+                      ),
+                  # ui.row(
+                  #     ui.output_plot("regplot3", width = "900px", height = "600px")
+                  #     ),
+                  ),
+    ui.nav_spacer(),
+    ui.nav_menu("Exit",
+                 ui.nav_control(
+                     ui.column(1,offset=0,*[ui.input_action_button("exit","Exit")]),
+                     ),
+                 ),
+    
+               
+underline = True, title = "plotIt v.0.0.2 ")
+
+
+def server(input: Inputs, output: Outputs, session: Session):
+    mdl_type = reactive.value("OLS") #currently supported types: OLS, LOGIT
+    mdl = reactive.value(None)
+    mdl_depvar = reactive.value('-')
+    mdl_indvar = reactive.value(())
+    mdl_stringM = reactive.value(" - ~ ")
+    mdl_data = reactive.value(pd.DataFrame())
+    subdict = reactive.value({})
+    logstr = reactive.value("")
+    dbgstr = reactive.value(f"At server start: Figures: {plt.get_fignums()} \n")
+    plt_msgstr = reactive.value("")
+    io_msgstr = reactive.value("")
+    lm_msgstr = reactive.value("")
+    plt_data = reactive.value(pd.DataFrame())
+   
+    @reactive.effect
+    @reactive.event(input.exit)
+    async def do_exit():
+        #plt.close(fig)
+        await session.app.stop()
+        os.kill(os.getpid(), signal.SIGTERM)
+        max_factor_values = 50
+
+#        basecolorsalpha = ['red',  'blue', 'green', 'goldenrod', 'violet','cyan', 'yellow','grey','gold','magenta','silver','orange','olive','khaki','thistle']
+#        basecolors = [matplotlib.colors.to_rgba(item,alpha = None) for item in basecolorsalpha]
+
+        #fig = plt.figure(figsize = (10,8),tight_layout=True)
+
+##########################################################################
+####  Input panel
+##########################################################################
+
+    @reactive.calc
+    def parsed_file():
+        if input.file1() is None:
+            return pd.DataFrame()
+        else: 
+            fpath = str(input.file1()[0]['datapath'])
+            if (fpath[-4:] == '.csv') or (fpath[-4:] == '.CSV'):
+                df = pd.read_csv(input.file1()[0]["datapath"])
+            else:
+                df = pd.read_stata(input.file1()[0]["datapath"])
+            stemp = df.isna().sum().sum()
+            df.replace('',np.nan,inplace = True)
+            stemp = df.isna().sum().sum() - stemp
+            
+            nona = sum(df.isna().sum(axis=1) >0)
+            
+            if (stemp > 0) | (nona > 0):
+                io_msgstr.set(f" {stemp} blank entries converted to NaNs. {nona} rows out of {len(df)} have missing data.")
+            #get rid of spaces in column names
+            df.columns = df.columns.str.lstrip()
+            df.columns = df.columns.str.rstrip()
+            df.columns = df.columns.str.replace(' ','_')
+            #change names to avoid collisions with protected names
+            df.columns = [collisionAvoidance(item,protected_names) for item in df.columns]
+            if (input.killna() == 'Yes') : df.dropna(inplace = True)
+            plt_data.set(df)
+            return df
+
+    @render.text
+    def info():
+        df = parsed_file()
+        #df = plt_data()
+        if df.empty:
+           return 
+        #display df.info
+        buffer = io.StringIO()
+        df.info(buf=buffer)
+        s = buffer.getvalue()
+        return s
+    
+    @render.table
+    def summary():
+        df = parsed_file()
+        #df = plt_data()
+        if df.empty:
+            return pd.DataFrame()
+        elif len(df) > 500000:
+            return pd.DataFrame({'': ['Too many rows','Use \"summary() \" from command line.']},index = ['Problem: ','Solution: '])
+
+        description = df.describe(include= "all")
+        dindex = description.index.values
+        description.insert(0," ",dindex)
+        return description
+
+    #warnings for data input panel
+    @render.text
+    #@reactive.event(input.updateB)
+    def io_mess():
+        return io_msgstr()  
+    
+##########################################################################
+####  Correlations panel
+##########################################################################
+    
+    @render.plot
+    @reactive.event(input.corrV)
+    def dataPD():
+        if input.corrV() == (): return
+        df = plt_data()
+        fig = plt.figure(figsize = (9,9))
+        showC = input.corrV()
+        showC = [item for item in showC]
+        dfc = df[showC].copy()
+        dfc.dropna(inplace = True)
+        nobs = len(dfc)
+        ax = sb.PairGrid(dfc, vars = showC, corner = True).set(title = f"# Obs.= {nobs}")
+        ax.map_diag(sb.histplot, kde=True)
+        ax.map_lower(plt.scatter, s= 2)
+        ax.map_lower(doCorr)
+        return 
+
+##########################################################################
+####  Plotting panel
+##########################################################################
+
+    @reactive.effect
+    @reactive.event(input.datachoose)
+    def data_update():
+#        print("... in data_update.")
+        with reactive.isolate():
+            if (input.datachoose() == 'Model Data') :
+                plt_data.set(mdl_data())
+            if (input.datachoose() == 'Input Data'):
+                plt_data.set(parsed_file())
+
+
+    @reactive.effect
+    def setupPlot():
+#        print("....In setupPlot")
+        df = pd.DataFrame()
+        df = plt_data()
+        nrow = len(df)
+        if (nrow == 0): 
+#            print(f"setupPlot...{nrow} rows in current data datachoose = {input.datachoose()}")
+            return
+        cols = list(df.columns)
+        num_var = list(df.select_dtypes(include=np.number).columns)
+
+        str_var = [item for item in cols if item not in num_var]    
+
+        #fct used for subsetting (fct short for factor) and coloring
+
+        fct_var = [item for item in cols if ((item not in num_var) or (len(list(df[item].unique()))<=max_factor_values))]
+        #subset dictionary
+        newdict = {}                
+        newdict = {item: list(map(str,list(df[item].unique()))) for item in fct_var}
+        subdict.set(newdict)
+
+        num_fct = [item for item in list(df.columns) if (item in num_var) and len(list(df[item].unique())) <= max_factor_values]
+        ui.update_selectize("xvar",choices = ['-']+num_var)
+        ui.update_selectize("yvar",choices = ['-']+num_var)
+        ui.update_selectize("zvar",choices = ['-']+num_var)
+        ui.update_selectize("cvar",choices = ['-']+fct_var)
+        ui.update_selectize("fvar",choices = ['-']+fct_var)
+        ui.update_selectize("corrV", choices = num_var, selected = None)
+        ui.update_selectize("indvar",choices = num_var + str_var)
+        ui.update_selectize("depvar",choices =  ['-'] + num_var)
+        ui.update_selectize("tofactor",choices =  num_fct)         
+        return
+    
+    #event observer to update subsetting dictionary
+    @reactive.effect
+    @reactive.event(input.fvar)
+    def newfilter():
+        df = plt_data()
+        if len(df) == 0: return
+        #if fvar is not set, restore all rows
+        if (input.fvar() == '-'): 
+            #fct used for subsetting (fct short for factor)
+            cols = list(df.columns)
+            num_var = list(df.select_dtypes(include=np.number).columns)
+            fct_var = [item for item in cols if ((item not in num_var) or (len(list(df[item].unique()))<=max_factor_values))]
+            #fctc_var = [item for item in fct_var if (len(list(df[item].unique()))<=5)]#10
+            fct_var.insert(0,"-")
+            #fctc_var.insert(0,"-")
+            newdict = {}
+            newdict = {item: list(map(str,list(df[item].unique()))) for item in fct_var if item != '-'}
+
+            #for item in fct_var:
+            #    if item != '-' : newdict[item] = list(map(str,list(df[item].unique())))
+            
+            subdict.set(newdict)
+            ui.update_selectize("fitems",choices = [], selected = [])
+            return
+        fv = input.fvar()
+        inc_items = list(df[fv].astype('str').unique())
+        ui.update_selectize("fitems", choices = inc_items, selected = inc_items)
+
+    @reactive.effect
+    @reactive.event(input.fitems)
+    def subdict_update():
+        #update the dictionary of currently active rows keys=col names values = lists of active row values
+        fv = input.fvar()
+        if (fv == '-'): return
+        newdict = subdict()
+        newdict[fv] = list(input.fitems())
+        subdict.set(newdict)
+        
+    @reactive.effect    
+    @reactive.event(input.xvar)
+    def do_xvar():
+        if input.xvar() == '-': 
+            plt.clf()
+            return
+        df = plt_data()
+        ui.update_numeric("xlb",value = min(df[input.xvar()]))
+        ui.update_numeric("xub",value = max(df[input.xvar()]))
+
+    @reactive.effect    
+    @reactive.event(input.yvar)
+    def do_yvar():
+        if input.yvar() == '-': 
+            plt.clf()
+            return
+        df = plt_data()
+        #ui.update_slider('sl1',label="Dot Size:",min=0.25,max=10.0,value=2.0,step=0.25)
+        ui.update_numeric("ylb",value = min(df[input.yvar()]))
+        ui.update_numeric("yub",value = max(df[input.yvar()]))
+        
+    @reactive.effect    
+    @reactive.event(input.zvar)
+    def do_zvar():
+        if input.zvar() == '-': 
+            plt.clf()
+            return
+        df = plt_data()
+        ui.update_numeric("zlb",value = min(df[input.zvar()]))
+        ui.update_numeric("zub",value = max(df[input.zvar()]))
+        
+    #displays log of currently active rows
+    @render.text
+    @reactive.event(input.updateB,input.fvar,input.xvar, input.yvar, input.zvar, input.cvar)
+    def log():  
+        if 1==1: #input.fvar() != '-':
+            return '\n'.join([f'{item}: {subdict()[item]}' for item in subdict().keys()])
+        else:
+            return ""
+        
+    # @render.text
+    # def debug():
+    #     return(dbgstr())
+        
+    #adjust ui to reflect number of variables (x only histogram/boxplot)   x and y or x,y and z scatterplot 
+    @render.ui
+    @reactive.event(input.xvar, input.yvar,input.zvar)
+    def pltopts():
+        df = plt_data()
+        mxbin = len(df)
+        if ((input.yvar() != '-') & (input.xvar() != '-') & (input.zvar() != '-')):
+            return ui.TagList(
+                              #ui.column(1,offset = 0,*[ui.input_action_button("updateB3", "Update")]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              ui.column(4,offset=0,*[ui.input_checkbox_group("scttropts","3D Scatter Plot Options:",
+                                                choices=('Show Trend','No Trend'),selected=(),inline = True)])
+                              )
+        elif ((input.yvar() != '-') & (input.xvar() != '-')):           
+            return ui.TagList(
+                              #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
+                                                                    choices=('Show Trend','No Trend'),selected=('No Trend'),inline = True)])
+                              )
+        elif(input.xvar() != '-'):
+            return ui.TagList(
+                              #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
+                              ui.column(3,offset=0,*[ui.input_radio_buttons("rb1","Plot type:",choices = ['Histogram','Boxplot','Kernel Density'],selected = 'Histogram',inline=True)]),
+                              ui.column(2,offset=0,*[ui.input_numeric("sl1","# Bins",value=min(max(round(mxbin**0.33,0),10),50), width=5)])
+                              )
+        else:
+            return None
+   
+    @render.ui
+    @reactive.event(input.updateB, input.zvar)
+    def grphopts():
+        if(input.zvar()!= '-') :
+            return ui.TagList(ui.column(12,offset=0,*[output_widget("plot3")])
+                              )
+        else:
+            return ui.TagList(ui.column(12,offset=0,*[ui.output_plot("Plots", width = '900px', height = '600px')])
+                              )  
+        
+    @output
+    @render_widget
+    @reactive.event(input.updateB)
+    def plot3():
+        plt.clf()
+        if (input.xvar() == '-') | (input.yvar() == '-') | (input.zvar() == '-'): return
+        df = plt_data()
+        if len(df) == 0: 
+            plt_msgstr.set("You need a data set before you can plot.")
+            return
+        xv = input.xvar()
+        yv = input.yvar()
+        zv = input.zvar()
+        totrow = len(df)
+        cv = input.cvar()
+        if cv == '-': cv = None 
+         #take out the rows that the user has decided to ignore
+        for item in list(subdict().keys()):
+            df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        nrow = len(df)
+        dfg = df.dropna(subset = [xv, yv, zv]) #get rid fo rows with na's in the columns to be plotted
+        if nrow > 400000:
+            dfg = dfg.sample(400000)
+            nrow = len(dfg)
+            ttlstr = f"File: {input.file1()[0]['name']} <br> down-sampled!  {nrow} rows plotted out of {totrow} "
+        else:
+            ttlstr = f"File: {input.file1()[0]['name']}:  {nrow} rows plotted out of {totrow} "
+        if input.titleplt() != "-" :
+            ttlstr = input.titleplt()
+        if (cv != None):
+            nucolor ,nupatches, colorD = getcolor(list(dfg[cv].astype('str')))
+            colormap = {str(item) : f"rgb({int(250*float(colorD[item][0]))},{int(250*float(colorD[item][1]))},{int(250*float(colorD[item][2]))})" for item in colorD.keys() }
+            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, color = list(dfg[cv].astype('str')), color_discrete_map = colormap, width = 900, height = 600, title = ttlstr)
+        else:
+            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, width = 900, height = 600, title = ttlstr)
+        fig.update_traces(marker = dict(size = int(input.sl1()/5 +1)))
+        #print(f".....Just before Show Trend in plot3 indvar = {list(mdl_indvar())}, model: {input.stringM()}, input.indvar = {input.indvar()}")
+        if  "Show Trend" in input.scttropts():
+            res = None
+            ## First get the framing right
+            sq = 0.05
+            #print(f"......at Show Trend: mld_indvar = {mdl_indvar()}, len = {len(mdl_indvar())} xv = {xv}, yv={yv}, zv = {zv}")
+            #if the x, y and z variables perfectly match the variables in the current model, then use that model's results and plot the 
+            #transformed model
+            if ((input.datachoose() == "Model Data") & (len(mdl_indvar())==2) & (xv in mdl_indvar()) & (yv in mdl_indvar()) 
+                & (zv == mdl_depvar()) & (mdl() !=  None)):
+                #print(f"in plot 3d using extant model....string={input.stringM()} input.indvar={input.indvar()} mdl_indvar = {input.indvar()}")
+                res = mdl()
+            else:# otherwise fit z againse x and y from scratch
+                if (set([0,1]) == set(df[zv])):
+                    try:
+                        res = smf.logit(f"{zv} ~ {xv} + {yv}" ,data= dfg).fit()
+                    except:
+                        res = None
+                else:
+                    try:
+                        res = smf.ols(f"{zv} ~ {xv} + {yv}" ,data= dfg).fit()
+                    except:
+                        res = None
+                
+            deltax = dfg[xv].max() - dfg[xv].min()
+            deltay = dfg[yv].max() - dfg[yv].min()
+            xlo = dfg[xv].min() - sq*deltax
+            xup = dfg[xv].max() + sq*deltax
+            ylo = dfg[yv].min() - sq*deltay
+            yup = dfg[yv].max() + sq*deltay
+            gridcount = 25                          
+            # create data for the response surface 
+            if (res != None):             
+                xvars, yvars = np.meshgrid(np.arange(xlo,xup,deltax/gridcount),
+                                 np.arange(ylo, yup,deltay/gridcount))                
+                exog0 = pd.DataFrame({xv: xvars.ravel(), yv: yvars.ravel()}) 
+                #calculate values of the dependent variable (z) for the response surface             
+                znew = res.predict(exog = exog0,transform = True).values.reshape(xvars.shape)
+
+                #exog0 dataframe has all the data
+                #exog0=exog0[exog0[zv]<=(1+sq)*dfg[zv].max()] #get rid of rows with extreme predictons beyond the data range
+                #we are ready to add the trace
+                fig.add_trace(go.Surface(x=xvars,y=yvars,z=znew, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
+                #fig.update_traces(colorbar = dict(orientation='h', y = -0.25, x = 0.5))
+        return fig
+                
+    @render.plot
+    @reactive.event(input.updateB)
+    def Plots():
+        if (input.zvar() != '-') : return # plotting happening in plot3()
+        if (input.xvar() == '-'):
+            plt.clf()
+            return
+        plt.clf()
+        df = plt_data()
+        if len(df) == 0: 
+            plt_msgstr.set("You need a data set before you can plot.")
+            return
+        xv = input.xvar()
+        yv = input.yvar()
+        zv = input.zvar()
+        totrow = len(df)
+        cv = input.cvar()
+        #print(f"Beginning of plots ...Model: {mdl_stringM()} indvar = {mdl_indvar()}  depvar = {mdl_depvar()}")
+
+
+        #expand the plot axes a squidge for esthetics
+        squidgeVal = 0.05
+        if (xv != '-'):
+            squidgeX = (input.xub()-input.xlb())*squidgeVal
+        if (yv != '-'):
+            squidgeY = (input.yub()-input.ylb())*squidgeVal
+        if (zv != '-'):
+            squidgeZ = (input.zub()-input.zlb())*squidgeVal
+     
+        
+        #create the row subset for plotting
+      
+        for item in list(subdict().keys()):
+           df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        nrow = len(df)
+        
+        sbst = [xv]
+        if yv != '-': sbst.append(yv)
+        if zv != '-': sbst.append(zv)
+        dfg = df.dropna(subset = sbst)
+        nrow = len(dfg)
+  
+        #set the color palette to something palatable
+        #alternatives rocket, paired, flare
+        
+        if (cv != '-'):
+            colorlist,lpatches,colorD = getcolor(list(dfg[cv].astype('str')))
+            color_data = dfg[cv].astype('str')
+        else:
+            cv = None
+            colorlist = None
+            color_data = None
+            
+        fig = plt.figure(2,figsize = (12,9), tight_layout = False)
+        fig.clf()
+        #make this a user choice later
+        sb.set_style("darkgrid", {"grid.color": ".6", "grid.linestyle": ":"})
+
+        #initialize some parameters
+        edgecol = 'black'
+        kdeflag = False
+        titlestr = f'File: {input.file1()[0]["name"]} rows shown {nrow} out of {totrow}'        
+        if  ((xv != '-') & (yv != '-')):
+            numx = dfg[xv].unique
+            ax=sb.scatterplot(data = dfg,x = xv,y = yv, c = colorlist,  s = input.sl1())
+            #print(f".....Just before Show Trend in plots mdl_indvar = {list(mdl_indvar())}, model: {mdl_stringM()}, input.indvar = {list(input.indvar())}, input.depvar = {input.depvar()}")
+            if "Show Trend" in input.scttropts():
+                res = None
+                if ((input.datachoose() == "Model Data") & (len(mdl_indvar())==1) & (xv in mdl_indvar()) & (yv in mdl_indvar()) 
+                       & (mdl() !=  None)):
+                    #print(f"...in plots using extant model....string={mdl_stringM()} imdl_ndvar={mdl_indvar()} mdl_depvar= {mdl_depvar()} mdl good? {mdl() != None}")
+                    res = mdl()
+                else:
+                    if (set([0,1]) == set(df[yv])):
+                        try:
+                            res = smf.logit(f"{yv} ~ {xv}" ,data= dfg).fit()
+                        except:
+                            res = None
+                    else:
+                        try:
+                            res = smf.ols(f"{yv} ~ {xv}" ,data= dfg).fit() #normal operations fit a new model put try/catch here
+                        except:
+                            res = None
+                   
+                sq = 0.05
+                deltax = dfg[xv].max() - dfg[xv].min() 
+                xlo = dfg[xv].min() - sq*deltax
+                xup = dfg[xv].max() + sq*deltax
+                gridcount = 25   
+                xvar = np.arange(xlo, xup, deltax/gridcount)                       
+                newdat = pd.DataFrame({xv : xvar})
+                if res != None:
+                    yvar = res.predict(exog = newdat,transform = True)
+                    newdat[yv] = yvar
+                    ax = sb.lineplot(x=xvar, y= yvar, color = 'red')    
+            ax.set_title(titlestr)
+            ax.set_xlabel(xv)
+            ax.set_ylabel(yv)
+            ax.set_xlim(input.xlb()-squidgeX,input.xub()+squidgeX)
+            ax.set_ylim(input.ylb()-squidgeY,input.yub()+squidgeY)
+            if (cv != None) :
+                ax.legend(title = cv, handles = lpatches)
+
+        elif (xv != '-'):
+            if (input.rb1() == 'Boxplot'):
+                ax =sb.boxplot(data = dfg, y=xv,x=color_data, notch = True)
+                #ax =sb.boxplot(data = dfg, y=xv,x=colorlist, notch = True)
+                ax.set_title(titlestr)
+            else: 
+               if (input.rb1() == "Kernel Density"):
+                   kdeflag = True
+               if (cv != None):
+                   edgecol = None
+               else: edgecol = 'black'
+               ax = sb.histplot(data = dfg, x=xv, hue = color_data, ec = edgecol,kde = kdeflag,bins=input.sl1())
+               #ax = sb.histplot(data = dfg, x=xv, color = colorlist, ec = edgecol,kde = kdeflag,bins=input.sl1())
+               ax.set_title(titlestr)
+
+               #ax.set_title(f'File: {input.file1()[0]["name"]} #rows = {nrow}')
+               ax.set_xlabel(xv)
+               ax.set_xlim(input.xlb()-squidgeX,input.xub()+squidgeX)
+        else: 
+            return
+        return plt.draw()
+
+    @render.download(filename="plotIt_Plotting_data.csv")
+    def downloadDP():
+        df = plt_data()
+        #create the row subset for graphing    
+        for item in list(subdict().keys()):
+            df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        yield df.to_csv(index = False)
+
+    #warnings for plotting panel
+    @render.text
+    @reactive.event(input.updateB)
+    def plt_mess():
+        return plt_msgstr()  
+        
+##########################################################################
+####  Linear Models panel
+##########################################################################
+                        
+    @reactive.effect
+    @reactive.event(input.depvar)    
+    def do_depvar():
+        df = plt_data()
+        #print(".....resetting model in do_depvar")
+        #mdl.set(None)
+        if len(df) == 0: return
+        num_var = list(df.select_dtypes(include=np.number).columns)
+        str_var = list(df.select_dtypes(exclude=np.number).columns)
+        if (input.depvar() == '-'): 
+            ui.update_selectize('depvar',choices = ['-'] + num_var)
+            ui.update_selectize('indvar',choices = num_var + str_var)
+        else: 
+            indvar_choices = [item for item in num_var+str_var if item != input.depvar()]
+            ui.update_selectize('indvar',choices = indvar_choices)
+        return
+                        
+    @reactive.effect
+    @reactive.event(input.indvar,input.depvar)
+    def doMstring():
+        ui.update_text("stringM",value = f"{''.join(input.depvar())} ~ {' + '.join(input.indvar())}")
+        return
+            
+    @reactive.effect
+    @reactive.event(input.modelGo)
+    def runModel():
+        df = plt_data()
+        #print(f"At runModel Top.::::::  input.indvar = {input.indvar()}")
+        size0 = len(df)
+        if (input.depvar() == '-'): 
+            return
+        #apply the current subset items are column names items are the dictionary keys, 
+        #   the dictionary entry is the list of active row values for that column.
+        for item in list(subdict().keys()):
+            df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        size1 = len(df)
+        #create factors for numerical variables as set by user by changing them into strings
+        for item in input.tofactor():
+            df[item] = df[item].astype('str')
+            
+        #manually remove rows containing NaNs in the dependent or independent variables columns
+        df.dropna(subset = [input.depvar()] + list(input.indvar()),inplace = True)   
+        size2 = len(df)              
+        #check to see if the dependent variable is binary (use logit) has several outcomes (use ols) or just one (quit)
+        outcomes = list(df[input.depvar()].unique())
+        no_outcomes = len(outcomes)
+        STOP = False
+        if (no_outcomes <= 1):
+            STOP = True
+        elif ((no_outcomes == 2) & (0 in outcomes) & (1 in outcomes)):
+            try:
+                res = smf.logit(formula = input.stringM(), data=df).fit()
+            except: 
+                STOP = True
+            mdl_type.set('LOGIT')
+        else:
+            try:
+                res = smf.ols(formula=input.stringM(), data=df).fit()
+            except: 
+                STOP = True            
+            mdl_type.set('OLS')
+        if STOP:
+            mdl_indvar.set([])
+            mdl.set(None)
+            ui.update_radio_buttons("datachoose",choices = ['Input Data'],selected = 'Input Data')
+            return
+        # regression succeeded          
+        mdl.set(res) 
+        mdl_d = pd.concat([res.model.data.orig_exog,res.model.data.orig_endog],axis = 1)
+        if (mdl_type() == 'LOGIT') :
+            mdl_d['Deviance_Resid'] = res.resid_dev
+            mdl_d['Predictions'] = res.predict()
+        elif (mdl_type()=='OLS'):
+            mdl_d['Residuals'] = res.resid
+            mdl_d['Predictions'] = res.fittedvalues
+        addoncols = [item for item in df.columns if item not in mdl_d.columns]
+        mdl_d = pd.concat([mdl_d,df[addoncols]],axis = 1)
+        mdl_data.set(mdl_d)
+        mdl_indvar.set(input.indvar())
+        mdl_depvar.set(input.depvar())
+        mdl_stringM.set(input.stringM())
+        #now setup the plotting variables
+        ui.update_select("lmsp",choices = ['-'] + list(res.params.index),selected = None)
+        if (mdl_type() == 'LOGIT'):
+            ui.update_radio_buttons("regplotR",choices = ['ROC', 'Partial Regression'], selected = 'ROC')
+        else:
+            ui.update_radio_buttons("regplotR",choices = ['Leverage','Partial Regression','Influence','Fit'],selected = 'Leverage')
+        ui.update_radio_buttons("datachoose",choices = ['Input Data', 'Model Data'],selected = 'Input Data')
+        #print(f"End of run model ...Model: {mdl_stringM()} indvar = {mdl_indvar()}  depvar = {mdl_depvar()}")
+        return
+    
+    @render.text
+    @reactive.event(input.modelGo)
+    def modelSummary():
+        if (mdl() == None) : return f"Model estimation failed.  Check data and model. {input.stringM()}"
+        return "Model: " + input.stringM() + "\n\n" + str( mdl().summary())
+        
+    @render.ui
+    @reactive.event(input.modelGo)
+    def dloads():
+        if (mdl() != None):
+            return ui.TagList(
+               ui.column(3,offset = 0,*[ui.download_button("downloadD", "Download Data Set")]),
+               )
+        else:
+            return None
+              
+    @render.download(filename="plotIt_Model_Data.csv")
+    def downloadD():
+        yield mdl_data().to_csv(index = False)
+         
+##########################################################################
+####  Linear Models: Standard Plots panel
+##########################################################################
+        
+    @render.plot
+    #@reactive.event(mdl)
+    def regplot1():
+        if (mdl() == None) : 
+            lm_msgstr.set("Run a model using the Linear Model tab before plotting it (first numbers, then pictures)")
+            return
+        lm_msgstr.set("")
+        fig = plt.figure(figsize=(8, 8)) 
+        if (input.regplotR() == 'Partial Regression'):
+            plot_partregress_grid(mdl(), fig=fig)
+            plt.axhline(y=0)
+            return plt.draw()
+        if (input.regplotR() == 'ROC') :
+            if (mdl_type() != 'LOGIT') : return
+            # Calculate ROC curve
+            fpr, tpr, thresholds = roc_curve(mdl_data()[input.depvar()], mdl_data()['Predictions']) 
+            roc_auc = auc(fpr, tpr)
+            # Plot the ROC curve
+            ax = fig.add_subplot()
+            ax.plot(fpr, tpr)
+            ax.plot([0, 1], [0, 1], 'k--')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title(f"ROC  Model: {input.stringM()}, AUC={round(roc_auc,3)}")
+            return plt.draw()
+        if (input.regplotR() == 'Leverage'):
+            if(mdl_type()!= 'OLS'): return
+            plot_leverage_resid2(mdl())          
+            return plt.draw()
+        if (input.regplotR() == 'Influence'):
+            if mdl_type() != 'OLS' : return
+            influence_plot(mdl(),fig = fig)          
+            return plt.draw()
+        if (input.regplotR() == 'Fit'):
+            ivs = list(mdl().params.index)
+            targetv = input.lmsp()
+            if (targetv in ivs):
+                varno = ivs.index(targetv)  
+                fig = plot_fit(mdl(),varno,vlines = False)
+            else:
+                return
+            fig.tight_layout(pad=1.0)
+            return plt.draw()
+
+    #warnings for linearmodels plot
+    @render.text
+    @reactive.event(input.updateM)
+    def lm_mess():
+            return lm_msgstr()
+        
+
+#app = App(app_ui, server,debug=True)
+app = App(app_ui, server)
+
