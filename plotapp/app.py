@@ -497,7 +497,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                               ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
                               ui.column(1,offset = 0,),
                               ui.column(4,offset=0,*[ui.input_checkbox_group("scttropts","3D Scatter Plot Options:",
-                                                choices=('Show Trend','CI','PI'),selected=(),inline = True)])
+                                                choices=('Show Trend',''),selected=(),inline = True)])
                               )
         elif ((input.yvar() != '-') & (input.xvar() != '-')):           
             return ui.TagList(
@@ -505,7 +505,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                               ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
                               ui.column(1,offset = 0,),
                               ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
-                                                                    choices=('Show Trend','CI','PI'),selected=(),inline = True)])
+                                                                    choices=('Show Trend',''),selected=(),inline = True)])
                               )
         elif(input.xvar() != '-'):
             return ui.TagList(
@@ -568,31 +568,27 @@ def server(input: Inputs, output: Outputs, session: Session):
             colormap = {str(item) : f"rgb({int(250*float(colorD[item][0]))},{int(250*float(colorD[item][1]))},{int(250*float(colorD[item][2]))})" for item in colorD.keys() }
             fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, color = list(dfg[cv].astype('str')), color_discrete_map = colormap, width = 900, height = 600, title = ttlstr)
         else:
-            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, width = 900, height = 900, title = ttlstr)
+            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, width = 900, height = 600, title = ttlstr)
         fig.update_traces(marker = dict(size = int(input.sl1()/5 +1))) # fix up dot size
         #print(f".....Just before Show Trend in plot3 indvar = {list(mdl_indvar())}, model: {input.stringM()}, input.indvar = {input.indvar()}")
         if  "Show Trend" in input.scttropts(): 
             res = None
-            MTYPE = None
             #if the x, y and z variables perfectly match the variables in the most recently estimated model, then use that model's results 
             #otherwise fit a new model
             if ((input.datachoose() == "Model Data") & (len(mdl_indvar())==2) & (xv in mdl_indvar()) & (yv in mdl_indvar()) 
                 & (zv == mdl_depvar()) & (mdl() !=  None)):
                 pushlog(f"in plot 3d using extant model....string={mdl_stringM()} indvar={mdl_indvar()} depvar = {mdl_indvar()}")
                 res = mdl()
-                MTYPE = mdl_type()
             else:# otherwise fit z against x and y from scratch
                 pushlog(f"in plot 3d fitting response surface model....string={mdl_stringM()} ndvar={mdl_indvar()} devar = {mdl_depvar()}")
                 if (set([0,1]) == set(df[zv])):
                     try:
                         res = smf.logit(f"{zv} ~ {xv} + {yv}" ,data= dfg).fit()
-                        MTYPE = 'LOGIT'
                     except:
                         res = None
                 else:
                     try:
                         res = smf.ols(f"{zv} ~ {xv} + {yv}" ,data= dfg).fit()
-                        MTYPE = 'OLS'
                     except:
                         res = None
             sq = 0.05               
@@ -608,28 +604,13 @@ def server(input: Inputs, output: Outputs, session: Session):
                 xvars, yvars = np.meshgrid(np.arange(xlo,xup,deltax/gridcount),
                                  np.arange(ylo, yup,deltay/gridcount))                
                 exog0 = pd.DataFrame({xv: xvars.ravel(), yv: yvars.ravel()}) 
-                #calculate values of the dependent variable (z) for the response surface 
-                res_predictions = res.get_prediction(exog=exog0,transform = True)
-                res_frame = res_predictions.summary_frame(alpha = input.siglev())
-                if MTYPE == 'LOGIT':
-                    znew   = res_frame['predicted'].values.reshape(xvars.shape)
-                    Ci_lb1 =  res_frame['ci_lower'].values.reshape(xvars.shape)
-                    Ci_ub1 =  res_frame['ci_upper'].values.reshape(xvars.shape)
-                elif MTYPE == 'OLS':
-                    znew = res_frame['mean'].values.reshape(xvars.shape)    
-                    Ci_lb1 =  res_frame['mean_ci_lower'].values.reshape(xvars.shape)
-                    Ci_ub1 =  res_frame['mean_ci_upper'].values.reshape(xvars.shape)
-                    Pi_lb1 =  res_frame['obs_ci_lower'].values.reshape(xvars.shape)
-                    Pi_ub1 =  res_frame['obs_ci_upper'].values.reshape(xvars.shape)
-            
-                #we are ready to add the traces
+                #calculate values of the dependent variable (z) for the response surface             
+                znew = res.predict(exog = exog0).values.reshape(xvars.shape)
+
+                #exog0 dataframe has all the data
+                #exog0=exog0[exog0[zv]<=(1+sq)*dfg[zv].max()] #get rid of rows with extreme predictons beyond the data range
+                #we are ready to add the trace
                 fig.add_trace(go.Surface(x=xvars,y=yvars,z=znew, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                if ('CI' in input.scttropts()):
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Ci_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Ci_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                if ('PI' in input.scttropts()) & (MTYPE == 'OLS'):
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
                 #fig.update_traces(colorbar = dict(orientation='h', y = -0.25, x = 0.5))
         if (z1v != '-'):
             dfg = dfg.dropna(subset = [z1v]) #get rid fo rows with na's in the columns to be plotted
@@ -730,19 +711,16 @@ def server(input: Inputs, output: Outputs, session: Session):
                        & (mdl() !=  None)):
                     pushlog(f"...in plots using extant model....string={mdl_stringM()} imdl_ndvar={mdl_indvar()} mdl_depvar= {mdl_depvar()} mdl good? {mdl() != None}")
                     res = mdl()
-                    MTYPE = mdl_type()
                 else:
                     if (set([0,1]) == set(df[yv])):
                         try:
                             res = smf.logit(f"{yv} ~ {xv}" ,data= dfg).fit()
-                            MTYPE = 'LOGIT'
                         except:
                             res = None
                     else:
                         try:
                             pushlog(f"...in plots using new model....string={mdl_stringM()} imdl_ndvar={mdl_indvar()} mdl_depvar= {mdl_depvar()} mdl good? {mdl() != None}")
                             res = smf.ols(f"{yv} ~ {xv}" ,data= dfg).fit() #normal operations fit a new model put try/catch here
-                            MTYPE = 'OLS'
                         except:
                             res = None
                    
@@ -757,33 +735,15 @@ def server(input: Inputs, output: Outputs, session: Session):
                     GOTREND = True
                     #yvar = res.predict(mdl_stringM(),data = newdat)
                     try:
-                        res_predictions = res.get_prediction(exog=newdat,transform = True)
-                        res_frame = res_predictions.summary_frame(alpha = input.siglev())
+                        yvar = res.predict(exog = newdat)
                     except:
                         pushlog("Predictions failed!")
                         pushlog(" Prediction data: ")
                         pushlog(f"{newdat.head()}")
                         GOTREND = False
                     if (GOTREND):
-                        if MTYPE == 'LOGIT':
-                            ynew   =  res_frame['predicted'].values.reshape(xvar.shape)
-                            Ci_lb1 =  res_frame['ci_lower'].values.reshape(xvar.shape)
-                            Ci_ub1 =  res_frame['ci_upper'].values.reshape(xvar.shape)
-                            Pi_ub1 = []
-                            Pi_lb1 = []
-                        elif MTYPE == 'OLS':
-                            ynew = res_frame['mean'].values.reshape(xvar.shape)    
-                            Ci_lb1 =  res_frame['mean_ci_lower'].values.reshape(xvar.shape)
-                            Ci_ub1 =  res_frame['mean_ci_upper'].values.reshape(xvar.shape)
-                            Pi_lb1 =  res_frame['obs_ci_lower'].values.reshape(xvar.shape)
-                            Pi_ub1 =  res_frame['obs_ci_upper'].values.reshape(xvar.shape)
-                        ax = sb.lineplot(x=xvar, y= ynew, color = 'red') 
-                        if ('CI' in input.scttropts()):
-                            ax = sb.lineplot(x = xvar, y= Ci_lb1, color = 'green')
-                            ax = sb.lineplot(x = xvar, y= Ci_ub1, color = 'green')
-                        if (len(Pi_ub1) != 0) & ('PI' in input.scttropts()):
-                            ax = sb.lineplot(x = xvar, y= Pi_lb1, color = 'goldenrod')
-                            ax = sb.lineplot(x = xvar, y= Pi_ub1, color = 'goldenrod')                            
+                        newdat[yv] = yvar
+                        ax = sb.lineplot(x=xvar, y= yvar, color = 'red') 
             # plot extra series if needed                    
             if (input.y1var() != '-'):
                 if (input.y1mark() == 'dot'):
