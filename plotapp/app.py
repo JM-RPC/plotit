@@ -65,20 +65,12 @@ def doCorr(xv, yv, **kws):
     ax.annotate("r = {:.3f}, p = {:.3f}".format(r,p),xy=(.1, .9), xycoords=ax.transAxes)
 
 app_ui = ui.page_navbar( 
-    ui.nav_panel("Input",
-        ui.input_file("file1", "Choose .csv or .dta File", accept=[".csv",".CSV",".dta",".DTA"], multiple=False, placeholder = ''),
-        ui.output_text('io_mess'),ui.input_radio_buttons('killna', 'Remove rows with missing data in one or more columns?',choices = ['No','Yes']),
-        ui.row(ui.output_data_frame("info"), height = '300px'),
-        ui.row(ui.HTML("<p> </p>")),
-        ui.row(ui.output_data_frame("summary")),
-        ui.row(ui.HTML("<p> </p>")),
-        ui.row(ui.output_data_frame("data")),
-        ),
-    ui.nav_panel("Correlations",
-                 ui.row(ui.input_selectize("corrV","Select variables:",choices = [''],multiple = True,width = "200px")),
-                 ui.output_plot("dataPD",width = '1200px', height = '1200px'),
-                 ),
     ui.nav_panel("Plotting",
+                 ui.row(
+                     ui.column(4,offset = 0,*[ui.input_file("file1", "Choose .csv or .dta File", accept=[".csv",".CSV",".dta",".DTA"], multiple=False, placeholder = '', width = "600px")]),
+                     ui.column(4,offset = 0,*[ui.input_radio_buttons('killna', 'On input remove rows with missing data in one or more columns?',choices = ['No','Yes'],inline = True)]),
+                     ui.column(4,offset = 0,),
+                     ),
                  ui.row(
                      ui.output_text("plt_mess",inline = True)
                      ),
@@ -96,8 +88,7 @@ app_ui = ui.page_navbar(
                      ui.column(1,offset=0),
                      ui.output_ui("pltopts"),
                      ui.column(1,offset=0),
-                     ui.column(3,offset = 0,*[ui.download_button("downloadDP","Save Plotting Data",width = "200px")]),
-                     
+                     ui.column(3,offset = 0,*[ui.download_button("downloadDP","Save Plotting Data",width = "200px")]),                
                      ),
                  ui.row(ui.output_ui("grphopts"),
                      ),
@@ -156,6 +147,21 @@ app_ui = ui.page_navbar(
                        ui.column(2,offset=0,*[ ui.input_numeric("siglev", "Significance Level:", value="0.05",width=20)]),
                        ),
                    ),
+    
+    ui.nav_panel("Data View",
+                 #ui.input_file("file1", "Choose .csv or .dta File", accept=[".csv",".CSV",".dta",".DTA"], multiple=False, width = "500px", placeholder = ''),
+                 #ui.output_text('io_mess'),ui.input_radio_buttons('killna', 'Remove rows with missing data in one or more columns?',choices = ['No','Yes']),
+                 ui.row(ui.output_data_frame("info"), height = '300px'),
+                 ui.row(ui.HTML("<p> </p>")),
+                 ui.row(ui.output_data_frame("summary")),
+                 ui.row(ui.HTML("<p> </p>")),
+                 ui.row(ui.output_data_frame("data")),
+                 ),
+
+    ui.nav_panel("Correlations",
+                   ui.row(ui.input_selectize("corrV","Select variables:",choices = [''],multiple = True,width = "200px")),
+                   ui.output_plot("dataPD",width = '1200px', height = '1200px'),
+                 ),
     ui.nav_panel("Linear Models",
                  ui.row(
                      ui.column(6,offset=0,*[ui.input_radio_buttons("mtype","Model Type",choices = ['OLS','LOGIT','POISSON','NEGATIVE_BINOMIAL'],inline = True)]),
@@ -164,7 +170,7 @@ app_ui = ui.page_navbar(
                      ),
                  ui.row(
                      ui.column(3, offset = 0, *[ui.input_selectize("depvar","Dependent Variable:",choices = ['-'],multiple = False)]),
-                     ui.column(5, offset = 0, *[ui.input_selectize("indvar","Independent Variables:", choices = ['-'],multiple = True)]),
+                     ui.column(5, offset = 0, *[ui.input_selectize("indvar","Independent Variables:", choices = ['-'],multiple = True, width = "600px")]),
                      ui.column(4, offset = 0, *[ui.input_selectize("tofactor","Convert Numeric Variables to factors:", choices = ['-'],multiple = True)]),
                      ),
                  ui.row(ui.HTML("<p> Use Wilkinson/Patsy notation to specify variable transformations.</p>")
@@ -224,7 +230,8 @@ def server(input: Inputs, output: Outputs, session: Session):
     lm_msgstr = reactive.value("")
     plt_data = reactive.value(pd.DataFrame())
     logstr = reactive.value(f"Log Start: {datetime.now()}")
-   
+    trendOn = reactive.value(False)
+
     @reactive.effect
     @reactive.event(input.exit)
     async def do_exit():
@@ -272,13 +279,13 @@ def server(input: Inputs, output: Outputs, session: Session):
     def parsed_file():
         if input.file1() is None:
             return pd.DataFrame()
-        else: 
+        else: #Note the ui passes only paths ending in  .csv, .CSV, .dta, and .DTA
             fpath = str(input.file1()[0]['datapath'])
             if (fpath[-4:] == '.csv') or (fpath[-4:] == '.CSV'):
                 #use this to create an option for extra large files to guess types from the first 1000 rows
-                #df1 = pd.read_csv(input.file1()[0]["datapath"],nrows = 1000)
-                #dataDict = dict(zip(list(df1.dtypes.index),list(df1.dtypes)))
-                #df = pd.read_csv(input.file1()[0]["datapath"],dtype = dataDict)
+                ##df1 = pd.read_csv(input.file1()[0]["datapath"],nrows = 1000)
+                ##dataDict = dict(zip(list(df1.dtypes.index),list(df1.dtypes)))
+                ##df = pd.read_csv(input.file1()[0]["datapath"],dtype = dataDict)
                 df = pd.read_csv(input.file1()[0]["datapath"])
             else:
                 df = pd.read_stata(input.file1()[0]["datapath"])
@@ -317,6 +324,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @render.data_frame
     def info():
+        #print("Render Info")
         df = parsed_file()
         #df = plt_data()
         if df.empty:
@@ -330,6 +338,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     
     @render.data_frame
     def summary():
+        #print("Render Data Frame summary")
         df = parsed_file()
         #df = plt_data()
         if df.empty:
@@ -344,6 +353,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     
     @render.data_frame
     def data():
+        #print("Render Data Frame")
         df = parsed_file()
         if len(df) > 100000 : return
         return df
@@ -355,6 +365,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render.plot
     @reactive.event(input.corrV)
     def dataPD():
+        #print("Setup correlations")
         if input.corrV() == (): return
         df = plt_data()
         fig = plt.figure(figsize = (9,9))
@@ -375,19 +386,20 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.effect
     @reactive.event(input.datachoose)
     def data_update():
+        pushlog("data_update")
         with reactive.isolate():
             if (input.datachoose() == 'Model Data') :
-                pushlog("Switching to model data.")
+                pushlog("...Switching to model data.")
                 plt_data.set(mdl_data())
             if (input.datachoose() == 'Input Data'):
-                pushlog("Switching to original input data.")
+                pushlog("...Switching to original input data.")
                 ui.update_radio_buttons("datachoose",label = "Data:",choices = ["Input Data"])
                 plt_data.set(parsed_file())
 
     # @reactive.effect
     # @reactive.event(parsed_file)
     # def clearModel():
-    #     pushlog("Plotting data has changed, clearing model.")
+    #     print("Plotting data has changed, clearing model.")
     #     df = plt_data()
     #     nrow = len(df)
     #     cols = list(df.columns)
@@ -410,9 +422,14 @@ def server(input: Inputs, output: Outputs, session: Session):
             return
         cols = list(df.columns)
         num_var = list(df.select_dtypes(include=np.number).columns)
-        str_var = [item for item in cols if item not in num_var]    
+        str_var = [item for item in cols if item not in num_var]   
+        pushlog(f"Numerical vars: {'; '.join(num_var)}") 
+        pushlog("...")
+        pushlog(f"String  vars: {'; '.join(str_var)}") 
+        pushlog("...")
         #fct used for subsetting (fct short for factor) and coloring
         fct_var = [item for item in cols if ((item not in num_var) or (len(list(df[item].unique()))<=max_factor_values))]
+        pushlog(f"Factor vars: {'; '.join(fct_var)}") 
         #subset dictionary
         pushlog("...Initializing filters.")
         newdict = {}                
@@ -438,7 +455,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         ui.update_selectize("w3var",choices = ['-'] + num_var)        
         ui.update_selectize("w4var",choices = ['-'] + num_var)        
         ui.update_selectize("w5var",choices = ['-'] + num_var)        
-        ui.update_selectize("w6var",choices = ['-'] + num_var)        
+        ui.update_selectize("w6var",choices = ['-'] + num_var)      
+        pushlog("...setupPlot returning")  
         return
     
     #event observer to update subsetting dictionary
@@ -446,10 +464,11 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.event(input.fvar)
     def newfilter():
         df = plt_data()
+        pushlog("newfilter()")
         if len(df) == 0: return
         #if fvar is not set, restore all rows
         if (input.fvar() == '-'): 
-            pushlog("Resetting row filter, all rows active.")
+            pushlog("...Resetting row filter, all rows active.")
             #fct used for subsetting (fct short for factor)
             cols = list(df.columns)
             num_var = list(df.select_dtypes(include=np.number).columns)
@@ -469,13 +488,14 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.effect
     @reactive.event(input.fitems)
     def subdict_update():
+        pushlog("subdict_update()")
         #update the dictionary of currently active rows keys=col names values = lists of active row values
         fv = input.fvar()
         if (fv == '-'): return
         newdict = subdict()
         newdict[fv] = list(input.fitems())
         subdict.set(newdict)
-        pushlog(f"Plot dictionary update:  Var = {fv}; Active values: {', '.join(newdict[fv])}")
+        pushlog(f"...Plot dictionary update:  Var = {fv}; Active values: {', '.join(newdict[fv])}")
         
     @reactive.effect    
     @reactive.event(input.xvar)
@@ -512,6 +532,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render.text
     @reactive.event(input.updateB,input.fvar,input.xvar, input.yvar, input.zvar, input.cvar)
     def log():  
+        pushlog("log(): show active rows")
         if 1==1: #input.fvar() != '-':
             return '\n'.join([f'{item}: {subdict()[item]}' for item in subdict().keys()])
         else:
@@ -528,21 +549,43 @@ def server(input: Inputs, output: Outputs, session: Session):
         df = plt_data()
         mxbin = len(df)
         if ((input.yvar() != '-') & (input.xvar() != '-') & (input.zvar() != '-')):
-            return ui.TagList(
+            if (input.datachoose() == 'Model Data')  & (set(input.indvar()) == set([input.xvar(),input.yvar()])) & (input.depvar() == input.zvar()):
+                trendOn.set(True)
+                return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB3", "Update")]),
                               ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
                               ui.column(1,offset = 0,),
                               ui.column(4,offset=0,*[ui.input_checkbox_group("scttropts","3D Scatter Plot Options:",
                                                 choices=('Show Trend','CI','PI'),selected=(),inline = True)])
                               )
-        elif ((input.yvar() != '-') & (input.xvar() != '-')):           
-            return ui.TagList(
+            else:
+                trendOn.set(False)
+                return ui.TagList(
+                              #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              #ui.column(1,offset = 0,),
+                              #ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
+                              #                                      choices=('Show Trend','CI','PI'),selected=(),inline = True)])
+                              )
+        elif (input.yvar() != '-') & (input.xvar() != '-'):  
+            if (input.datachoose() == 'Model Data') & (input.xvar() in input.indvar()) & (input.yvar() == input.depvar()):
+                trendOn.set(True)
+                return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
                               ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
                               ui.column(1,offset = 0,),
                               ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
                                                                     choices=('Show Trend','CI','PI'),selected=(),inline = True)])
                               )
+            else:
+                trendOn.set(False)
+                return ui.TagList(
+                              #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              #ui.column(1,offset = 0,),
+                              #ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
+                              #                                      choices=('Show Trend','CI','PI'),selected=(),inline = True)])
+                              )               
         elif(input.xvar() != '-'):
             return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
@@ -551,7 +594,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                               )
         else:
             return None
-   
+    
     @render.ui
     @reactive.event(input.updateB, input.zvar)
     def grphopts():
@@ -594,18 +637,20 @@ def server(input: Inputs, output: Outputs, session: Session):
             #otherwise fit a new model
             depV = "".join(mdl_stringM().split()).split('~')[0]
             indV = "".join(mdl_stringM().split()).split('~')[1].split('+')
-            if ((input.datachoose() == "Model Data") & (len(mdl_indvar())==2) & (mdl() !=  None)):
-                res = mdl()
-                MTYPE = mdl_type()
-            elif ((input.datachoose() == "Model Data") & (len(mdl_indvar())==1) & (xv in indV) & (yv == depV) 
-                & (mdl() !=  None)): 
-                res = mdl()
-                MTYPE = mdl_type()
-            else: #No current model fits.  Return empty dataframe (we'll work on this later)
-                pushlog("...No extant model available. No trend line or surface.")
-                pushlog(f"...input.stringM:{input.stringM()}, input.depvar={input.depvar()}, input.indvar = {input.indvar()}")
-                pushlog(f"...mdl_stringM = {mdl_stringM()}, mdl_depvar = {mdl_depvar()}, mdl_indvar = {mdl_indvar()}")
-                return [],[],[],[],[],[],[]
+            res = mdl()
+            MTYPE = mdl_type
+            # if ((input.datachoose() == "Model Data") & (len(mdl_indvar())==2) & (mdl() !=  None)):
+            #     res = mdl()
+            #     MTYPE = mdl_type()
+            # elif ((input.datachoose() == "Model Data") & (len(mdl_indvar())==1) & (xv in indV) & (yv == depV) 
+            #     & (mdl() !=  None)): 
+            #     res = mdl()
+            #     MTYPE = mdl_type()
+            # else: #No current model fits.  Return empty dataframe (we'll work on this later)
+            #     pushlog("...No extant model available. No trend line or surface.")
+            #     pushlog(f"...input.stringM:{input.stringM()}, input.depvar={input.depvar()}, input.indvar = {input.indvar()}")
+            #     pushlog(f"...mdl_stringM = {mdl_stringM()}, mdl_depvar = {mdl_depvar()}, mdl_indvar = {mdl_indvar()}")
+            #     return [],[],[],[],[],[],[]
             try:
                 res_predictions = res.get_prediction(exog=exog0,transform = True)
                 res_frame = res_predictions.summary_frame(alpha = input.siglev())
@@ -613,6 +658,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 pushlog("...Predictions failed!")
                 pushlog("...Prediction data: ")
                 pushlog(f"...  {exog0.head()}")
+                pushlog("...You must identify the same plotting variables as model variables (1 variable and 2 variable models only)")
                 return [],[],[],[],[],[],[]
             znew = res_frame['mean'].values.reshape(xvar.shape)    
             Ci_lb1 =  res_frame['mean_ci_lower'].values.reshape(xvar.shape)
@@ -629,6 +675,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render_widget
     @reactive.event(input.updateB)
     def plot3():
+        pushlog("plot3()")
         plt.clf()
         if (input.xvar() == '-') | (input.yvar() == '-') | (input.zvar() == '-'): return
         df = plt_data()
@@ -646,7 +693,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         w6v = input.w6var()
         totrow = len(df)
         cv = input.cvar()
-        #pushlog(f"Plotting: x = {xv}, y={yv}, z={zv}, color = {cv} ")
+        #print(f"Plotting: x = {xv}, y={yv}, z={zv}, color = {cv} ")
         if cv == '-': cv = None 
          #take out the rows that the user has decided to ignore
         for item in list(subdict().keys()):
@@ -659,10 +706,10 @@ def server(input: Inputs, output: Outputs, session: Session):
             dfg = dfg.sample(400000)
             nrow = len(dfg)
             ttlstr = f"File: {input.file1()[0]['name']} <br> down-sampled!  {nrow} rows plotted out of {totrow} "
-            pushlog("Plotly 3D plotting limit warning! Attempted to plot {nrow} rows, downsampled to 400,000 rows.")
+            pushlog("...Plotly 3D plotting limit warning! Attempted to plot {nrow} rows, downsampled to 400,000 rows.")
         else:
             ttlstr = f"File: {input.file1()[0]['name']}:  {nrow} rows plotted out of {totrow} "
-            pushlog(f"plot3: {totrow-nrow0} rows filtered out, {nrow0-nrow} rows removed due to missing data.")
+            pushlog(f"...plot3: {totrow-nrow0} rows filtered out, {nrow0-nrow} rows removed due to missing data.")
         if input.titleplt() != "-" :
             ttlstr = input.titleplt()
         if (cv != None):
@@ -673,72 +720,74 @@ def server(input: Inputs, output: Outputs, session: Session):
             fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, width = 900, height = 900, title = ttlstr)
         fig.layout.scene.aspectratio = {'x':1, 'y':1, 'z':1}
         fig.update_traces(marker = dict(size = int(input.sl1()/5 +1))) # fix up dot size
-        if  "Show Trend" in input.scttropts(): 
-            xvars, yvars, znew, Ci_lb1, Ci_ub1, Pi_lb1, Pi_ub1 = doTrend() 
-            if len(znew) >0:                                
-                #we are ready to add the traces
-                fig.add_trace(go.Surface(x=xvars,y=yvars,z=znew, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                if ('CI' in input.scttropts()):
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Ci_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Ci_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                if ('PI' in input.scttropts()) & (len(Pi_lb1) >0):
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
-            else:
-                pushlog("To plot a response surface you must fit a model (see 'Linear Models Tab')")            
+        if trendOn():
+            if  "Show Trend" in input.scttropts(): 
+                xvars, yvars, znew, Ci_lb1, Ci_ub1, Pi_lb1, Pi_ub1 = doTrend() 
+                if len(znew) >0:                                
+                    #we are ready to add the traces
+                    fig.add_trace(go.Surface(x=xvars,y=yvars,z=znew, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
+                    if ('CI' in input.scttropts()):
+                        fig.add_trace(go.Surface(x=xvars,y=yvars,z=Ci_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
+                        fig.add_trace(go.Surface(x=xvars,y=yvars,z=Ci_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
+                    if ('PI' in input.scttropts()) & (len(Pi_lb1) >0):
+                        fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
+                        fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
+                else:
+                    pushlog("...Trend calculation failed. ")           
         if (w1v != '-'):
             dfg = dfg.dropna(subset = [w1v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w1mark() == 'dot'):
                 fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w1v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
-                pushlog(f" 3D extra plot #1 variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #1 variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
             elif (input.w1mark() == 'line'):
-                pushlog(f" 3D extra plot #1  variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
-                fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w1v],color = input.w1col()))
+                pushlog(f"...3D extra plot #1  variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
+                fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w1v],color = input.w1col(), opacity = 0.6))
         if (w2v != '-'):
             dfg = dfg.dropna(subset = [w2v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w2mark() == 'dot'):
                 fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w2v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
-                pushlog(f" 3D extra plot #2 variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #2 variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")
             elif (input.w2mark() == 'line'):
-                pushlog(f" 3D extra plot #2  variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #2  variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")
                 fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w2v],color = input.w1col()))
         if (w3v != '-'):
             dfg = dfg.dropna(subset = [w3v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w3mark() == 'dot'):
                 fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w3v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
-                pushlog(f" 3D extra plot #3 variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #3 variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")
             elif (input.w3mark() == 'line'):
-                pushlog(f" 3D extra plot #3  variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #3  variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")
                 fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w3v],color = input.w1col()))
         if (w4v != '-'):
             dfg = dfg.dropna(subset = [w4v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w4mark() == 'dot'):
                 fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w4v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
-                pushlog(f" 3D extra plot #4 variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #4 variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
             elif (input.w4mark() == 'line'):
-                pushlog(f" 3D extra plot #4  variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #4  variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
                 fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w4v],color = input.w1col()))
         if (w5v != '-'):
             dfg = dfg.dropna(subset = [w5v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w5mark() == 'dot'):
                 fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w5v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
-                pushlog(f" 3D extra plot #5 variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #5 variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")
             elif (input.w5mark() == 'line'):
-                pushlog(f" 3D extra plot #5  variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #5  variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")
                 fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w5v],color = input.w1col()))
         if (w6v != '-'):
             dfg = dfg.dropna(subset = [w6v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w6mark() == 'dot'):
                 fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w6v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
-                pushlog(f" 3D extra plot #6 variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #6 variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")
             elif (input.w6mark() == 'line'):
-                pushlog(f" 3D extra plot #6  variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")
+                pushlog(f"...3D extra plot #6  variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")
                 fig.add_trace(go.Mesh3d( x = dfg[xv], y = dfg[yv], z = dfg[w6v],color = input.w1col()))
         return fig
                 
     @render.plot
     @reactive.event(input.updateB)
     def Plots():
+        pushlog("Plots")
         if (input.zvar() != '-') : return # plotting happening in plot3()
         if (input.xvar() == '-'):
             plt.clf()
@@ -753,7 +802,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         zv = input.zvar()
         totrow = len(df)
         cv = input.cvar()
-        pushlog(f"plotting x = {xv}, y = {yv}, color = {cv}")
+        pushlog(f"...plotting x = {xv}, y = {yv}, color = {cv}")
         #print(f"Beginning of plots ...Model: {mdl_stringM()} indvar = {mdl_indvar()}  depvar = {mdl_depvar()}")
         #expand the plot axes a squidge for esthetics
         squidgeVal = 0.05
@@ -765,14 +814,14 @@ def server(input: Inputs, output: Outputs, session: Session):
         for item in list(subdict().keys()):
            df = df[df[item].astype('str').isin(list(subdict()[item]))]
         nrow1 = len(df)
-        pushlog(f"{totrow-nrow1} rows excluded via filter.")
+        pushlog(f"...{totrow-nrow1} rows excluded via filter.")
         #drop rows that have NaN values in the columns to be plotted
         sbst = [xv]
         if yv != '-': sbst.append(yv)
         if zv != '-': sbst.append(zv)
         dfg = df.dropna(subset = sbst)
         nrow = len(dfg)
-        pushlog(f"{nrow1 - nrow} rows dropped from plotting set due to missing data.")
+        pushlog(f"...{nrow1 - nrow} rows dropped from plotting set due to missing data.")
         if (cv != '-'):
             colorlist,lpatches,colorD = getcolor(list(dfg[cv].astype('str')))
             color_data = dfg[cv].astype('str')
@@ -792,68 +841,69 @@ def server(input: Inputs, output: Outputs, session: Session):
             #numx = dfg[xv].unique
             ax=sb.scatterplot(data = dfg,x = xv,y = yv, c = colorlist,  s = input.sl1(),label = yv)
             #print(f".....Just before Show Trend in plots mdl_indvar = {list(mdl_indvar())}, model: {mdl_stringM()}, input.indvar = {list(input.indvar())}, input.depvar = {input.depvar()}")
-            if "Show Trend" in input.scttropts():
-                xvar, yvar, ynew, Ci_lb1, Ci_ub1, Pi_lb1, Pi_ub1 = doTrend()
-                if len(ynew) >0: 
-                        ax = sb.lineplot(x=xvar, y= ynew, color = 'red') 
-                        if ('CI' in input.scttropts()):
-                            ax = sb.lineplot(x = xvar, y= Ci_lb1, color = 'green')
-                            ax = sb.lineplot(x = xvar, y= Ci_ub1, color = 'green')
-                        if ('PI' in input.scttropts()) & (len(Pi_lb1) > 0):
-                            ax = sb.lineplot(x = xvar, y= Pi_lb1, color = 'goldenrod')
-                            ax = sb.lineplot(x = xvar, y= Pi_ub1, color = 'goldenrod')   
-                else: 
-                    pushlog("...In order to plot a trend, you must fit model (see 'Linear Models' tab)")  
+            if trendOn():
+                if "Show Trend" in input.scttropts():
+                    xvar, yvar, ynew, Ci_lb1, Ci_ub1, Pi_lb1, Pi_ub1 = doTrend()
+                    if len(ynew) >0: 
+                            ax = sb.lineplot(x=xvar, y= ynew, color = 'red') 
+                            if ('CI' in input.scttropts()):
+                                ax = sb.lineplot(x = xvar, y= Ci_lb1, color = 'green')
+                                ax = sb.lineplot(x = xvar, y= Ci_ub1, color = 'green')
+                            if ('PI' in input.scttropts()) & (len(Pi_lb1) > 0):
+                                ax = sb.lineplot(x = xvar, y= Pi_lb1, color = 'goldenrod')
+                                ax = sb.lineplot(x = xvar, y= Pi_ub1, color = 'goldenrod')   
+                    else: 
+                        pushlog("...Trend calculation failed ")  
 
             # plot extra series if needed                    
             if (input.w1var() != '-'):
                 if (input.w1mark() == 'dot'):
                     ax=sb.scatterplot(data = dfg,x = xv,y = input.w1var(), c = input.w1col(),  s = input.sl1(),label = input.w1var())
-                    pushlog(f" extra plot #1 variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #1 variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
                     #ax.add(sb.Dot())    
                 elif (input.w1mark() == 'line'):
-                    pushlog(f" extra plot #1  variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #1  variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
                     ax = sb.lineplot(data= dfg, x=xv, y=input.w1var(), color = input.w1col(),label = input.w1var())
                     #plt.legend(title = input.w1var(), loc = 1, fontsize = 12)
             if (input.w2var() != '-'):
                 if (input.w2mark() == 'dot'):
                     ax=sb.scatterplot(data = dfg,x = xv,y = input.w2var(), c = input.w2col(),  s = input.sl1(),label = input.w2var())
-                    pushlog(f" extra plot #2 variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")  
+                    pushlog(f"... extra plot #2 variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")  
                 elif (input.w2mark() == 'line'):
-                    pushlog(f" extra plot #2 variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #2 variable= {input.w2var()} color = {input.w2col()} NOTE: missing values are dropped.")
                     ax = sb.lineplot(data= dfg, x=xv, y=input.w2var(), color = input.w2col(),label = input.w2var())
                     #plt.legend(title = input.w2var(), loc = 1, fontsize = 12)
             if (input.w3var() != '-'):
                 if (input.w3mark() == 'dot'):
                     ax=sb.scatterplot(data = dfg,x = xv,y = input.w3var(), c = input.w3col(),  s = input.sl1(),label = input.w3var())
-                    pushlog(f" extra plot #3 variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")  
+                    pushlog(f"... extra plot #3 variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")  
                 elif (input.w3mark() == 'line'):
-                    pushlog(f" extra plot #3 variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #3 variable= {input.w3var()} color = {input.w3col()} NOTE: missing values are dropped.")
                     ax = sb.lineplot(data= dfg, x=xv, y=input.w3var(), color = input.w3col(),label = input.w3var())
                     #plt.legend(title = input.w3var(), loc = 1, fontsize = 12)                    
             if (input.w4var() != '-'):
                 if (input.w4mark() == 'dot'):
                     ax=sb.scatterplot(data = dfg,x = xv,y = input.w4var(), c = input.w4col(),  s = input.sl1(),label = input.w4var())
-                    pushlog(f" extra plot #4 variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #4 variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
                     #ax.add(sb.Dot())    
                 elif (input.w4mark() == 'line'):
-                    pushlog(f" extra plot #4  variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #4  variable= {input.w4var()} color = {input.w4col()} NOTE: missing values are dropped.")
                     ax = sb.lineplot(data= dfg, x=xv, y=input.w4var(), color = input.w4col(),label = input.w4var())
                     #plt.legend(title = input.w4var(), loc = 1, fontsize = 12)
             if (input.w5var() != '-'):
                 if (input.w5mark() == 'dot'):
                     ax=sb.scatterplot(data = dfg,x = xv,y = input.w5var(), c = input.w5col(),  s = input.sl1(),label = input.w5var())
-                    pushlog(f" extra plot #5 variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")  
+                    pushlog(f"... extra plot #5 variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")  
                 elif (input.w5mark() == 'line'):
-                    pushlog(f" extra plot #5 variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #5 variable= {input.w5var()} color = {input.w5col()} NOTE: missing values are dropped.")
                     ax = sb.lineplot(data= dfg, x=xv, y=input.w5var(), color = input.w5col(),label = input.w5var())
                     #plt.legend(title = input.w5var(), loc = 1, fontsize = 12)
             if (input.w6var() != '-'):
                 if (input.w6mark() == 'dot'):
                     ax=sb.scatterplot(data = dfg,x = xv,y = input.w6var(), c = input.w6col(),  s = input.sl1(),label = input.w6var())
-                    pushlog(f" extra plot #6 variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")  
+                    pushlog(f"... extra plot #6 variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")  
                 elif (input.w6mark() == 'line'):
-                    pushlog(f" extra plot #6 variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")
+                    pushlog(f"... extra plot #6 variable= {input.w6var()} color = {input.w6col()} NOTE: missing values are dropped.")
                     ax = sb.lineplot(data= dfg, x=xv, y=input.w6var(), color = input.w6col(),label = input.w6var())
             plt.legend(loc = 1, fontsize = 12)                    
 
@@ -889,6 +939,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render.download(filename="plotIt_Plotting_data.csv")
     def downloadDP():
         df = plt_data()
+        print("Download plotting data to: plotIt_Plotting_data.csv")
         #create the row subset for graphing    
         for item in list(subdict().keys()):
             df = df[df[item].astype('str').isin(list(subdict()[item]))]
@@ -930,7 +981,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     # @reactive.event(input.modelClear)
     # def nukeModel():
     #     #print("Found nukeModel!")
-    #     pushlog(f"Nuking model: {input.stringM()}  at user request.")
+    #     print(f"Nuking model: {input.stringM()}  at user request.")
     #     df = plt_data()
     #     #print(f"...model data has {len(df)} rows.")
     #     if df.empty: return
@@ -1071,6 +1122,12 @@ def server(input: Inputs, output: Outputs, session: Session):
             mdl_d['Predictions'] = res_frame['mean']
             mdl_d['Residuals'] =  res.resid
         addoncols = [item for item in df.columns if item not in mdl_d.columns]
+        #reconvert numeric variables that were turned into strings (and subsequently factors)
+        for item in input.tofactor():
+            df[item] = pd.to_numeric(df[item])    
+        #prepare the data set for applying the plotting tools to the model
+        pushlog(f"...Model data columns: {','.join(mdl_d.columns)}")
+        pushlog(f"...Extra data columns: {','.join(addoncols)}")
         mdl_d = pd.concat([mdl_d,df[addoncols]],axis = 1)
         mdl_data.set(mdl_d)
         mdl_indvar.set(input.indvar())
