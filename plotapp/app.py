@@ -240,10 +240,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         os.kill(os.getpid(), signal.SIGTERM)
         max_factor_values = 50
 
-#        basecolorsalpha = ['red',  'blue', 'green', 'goldenrod', 'violet','cyan', 'yellow','grey','gold','magenta','silver','orange','olive','khaki','thistle']
-#        basecolors = [matplotlib.colors.to_rgba(item,alpha = None) for item in basecolorsalpha]
-
-        #fig = plt.figure(figsize = (10,8),tight_layout=True)
         
 ##########################################################################
 ####  Log panel
@@ -400,19 +396,6 @@ def server(input: Inputs, output: Outputs, session: Session):
                 pushlog("...Switching to original input data.")
                 ui.update_radio_buttons("datachoose",label = "Data:",choices = ["Input Data"])
                 plt_data.set(parsed_file())
-
-    # @reactive.effect
-    # @reactive.event(parsed_file)
-    # def clearModel():
-    #     print("Plotting data has changed, clearing model.")
-    #     df = plt_data()
-    #     nrow = len(df)
-    #     cols = list(df.columns)
-    #     num_var = list(df.select_dtypes(include=np.number).columns)
-    #     str_var = [item for item in cols if item not in num_var]    
-    #     ui.update_selectize("indvar",choices = num_var + str_var)
-    #     ui.update_selectize("depvar",choices =  ['-'] + num_var)
-
 
 
     @reactive.effect
@@ -662,18 +645,6 @@ def server(input: Inputs, output: Outputs, session: Session):
             indV = "".join(mdl_stringM().split()).split('~')[1].split('+')
             res = mdl()
             MTYPE = mdl_type()
-            # if ((input.datachoose() == "Model Data") & (len(mdl_indvar())==2) & (mdl() !=  None)):
-            #     res = mdl()
-            #     MTYPE = mdl_type()
-            # elif ((input.datachoose() == "Model Data") & (len(mdl_indvar())==1) & (xv in indV) & (yv == depV) 
-            #     & (mdl() !=  None)): 
-            #     res = mdl()
-            #     MTYPE = mdl_type()
-            # else: #No current model fits.  Return empty dataframe (we'll work on this later)
-            #     pushlog("...No extant model available. No trend line or surface.")
-            #     pushlog(f"...input.stringM:{input.stringM()}, input.depvar={input.depvar()}, input.indvar = {input.indvar()}")
-            #     pushlog(f"...mdl_stringM = {mdl_stringM()}, mdl_depvar = {mdl_depvar()}, mdl_indvar = {mdl_indvar()}")
-            #     return [],[],[],[],[],[],[]
             try:
                 res_predictions = res.get_prediction(exog=exog0,transform = True)
                 res_frame = res_predictions.summary_frame(alpha = input.siglev())
@@ -756,7 +727,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                         fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_lb1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
                         fig.add_trace(go.Surface(x=xvars,y=yvars,z=Pi_ub1, opacity = 0.75,showscale = False)) #dict(orientation = 'h')))
                 else:
-                    pushlog("...Trend calculation failed. Trend requires model variables and plotting variables to match.  Check and re-run model.")           
+                    pushlog("...Trend calculation failed. Model variables and plotting variables must match.  Check and re-run model.")           
         if (w1v != '-'):
             dfg = dfg.dropna(subset = [w1v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w1mark() == 'dot'):
@@ -863,6 +834,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         if  ((xv != '-') & (yv != '-')):
             #numx = dfg[xv].unique
             ax=sb.scatterplot(data = dfg,x = xv,y = yv, c = colorlist,  s = input.sl1(),label = yv)
+            if yv == 'Residuals':
+                plt.axhline(y = 0, color = 'black')
             #print(f".....Just before Show Trend in plots mdl_indvar = {list(mdl_indvar())}, model: {mdl_stringM()}, input.indvar = {list(input.indvar())}, input.depvar = {input.depvar()}")
             if trendOn():
                 if "Show Trend" in input.scttropts():
@@ -876,7 +849,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                                 ax = sb.lineplot(x = xvar, y= Pi_lb1, color = 'goldenrod')
                                 ax = sb.lineplot(x = xvar, y= Pi_ub1, color = 'goldenrod')   
                     else: 
-                        pushlog("...Trend calculation failed. Plotting variables and model variables must match to plot a trend.  Check data and re-run model. ")  
+                        pushlog("...Trend calculation failed. Plotting variables and model variables must match.  Check data and re-run model. ")  
 
             # plot extra series if needed                    
             if (input.w1var() != '-'):
@@ -1000,33 +973,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         ui.update_text("stringM",value = f"{''.join(input.depvar())} ~ {' + '.join(input.indvar())}")
         return
     
-    # @reactive.effect
-    # @reactive.event(input.modelClear)
-    # def nukeModel():
-    #     #print("Found nukeModel!")
-    #     print(f"Nuking model: {input.stringM()}  at user request.")
-    #     df = plt_data()
-    #     #print(f"...model data has {len(df)} rows.")
-    #     if df.empty: return
-    #     cols = list(df.columns)
-    #     #print(f"...Columns: {' '.join(cols)}")
-    #     num_var = list(df.select_dtypes(include=np.number).columns)
-    #     str_var = [item for item in cols if item not in num_var]    
-    #     num_fct = [item for item in list(df.columns) if (item in num_var) and len(list(df[item].unique())) <= max_factor_values]
-    #     ui.update_selectize("indvar",choices = num_var + str_var,selected = [])
-    #     ui.update_selectize("depvar",choices =  ['-'] + num_var, selected = '-')
-    #     ui.update_selectize("tofactor",choices =  num_fct,selected = [])
-    #     print(f"...Done with UI updates: ")
-    #     mdl_data.set(pd.DataFrame()) 
-    #     mdl.set(None)
-    #     mdl_indvar.set(())
-    #     mdl_depvar.set('-')
-    #     ui.update_radio_buttons("datachoose",choices = ['Input Data'],selected = 'Input Data')
-
-    #     return
-
-
-
     @reactive.effect
     @reactive.event(input.modelGo)
     def runModel():
@@ -1176,7 +1122,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         #then we choose 'Model Data' but we don't hide it -- this triggers dataUpdate() and setupPlot() to initialize the model data as the  plotting data.
         ui.update_radio_buttons("datachoose",label = "Data: (selecting Input Data clears model)",choices = ['Input Data','Model Data'],selected = 'Model Data')
         
-
         pushlog(f"Estimation successful. {mdl_type()} ...Model: {mdl_stringM()}")
         pushlog(str( mdl().summary()))
         return
@@ -1187,12 +1132,17 @@ def server(input: Inputs, output: Outputs, session: Session):
         if (mdl() == None) : 
             outstring = f"Model estimation failed or model cleared.  Check log for details. model: {input.stringM()}"
             return outstring
+        SSstr0 =  "=============================================================================="
         if mdl_type() == 'OLS' :
-            SSstr0 =  "=============================================================================="
             SSstr1 =  f"SSE = {round(mdl().ssr,5)}, SSR={round(mdl().ess,5)}, SST = {round(mdl().ssr + mdl().ess,5)}" 
             SSstr2 = f"MSE = {round(mdl().mse_resid,5)}, MSR ={round(mdl().mse_model,5)}, MST = {round(mdl().mse_total,5)} "   
-            SSstr = "Model: " + input.stringM() + "\n\n" + str( mdl().summary()) + "\n"+ SSstr0 + "\n" +SSstr1 + "\n" + SSstr2 + "\n" + SSstr0     
-        else: SSstr = "Model: " + input.stringM() + "\n\n" + str( mdl().summary())
+            SSstr = "Model: " + input.stringM() + "\n\n" + str( mdl().summary()) + "\n"+ SSstr0 + "\n" +SSstr1 + "\n" + SSstr2 + "\n" + SSstr0  
+        elif mdl_type() == 'LOGIT' :
+            fpr, tpr, thresholds = roc_curve(mdl_data()[input.depvar()], mdl_data()['Predictions']) 
+            roc_auc = auc(fpr, tpr)  
+            SSstr1 = f" AUC: {roc_auc}"
+            SSstr = "Model: " + input.stringM() + "\n\n" + str( mdl().summary()) + "\n" + SSstr0 + "\n" + SSstr1 + "\n" + SSstr0
+        else: SSstr = "Model: " + input.stringM() + "\n\n" + str( mdl().summary()) 
         return SSstr
         
     @render.ui
@@ -1240,7 +1190,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             ax.set_ylim([0.0, 1.05])
             ax.set_xlabel('False Positive Rate')
             ax.set_ylabel('True Positive Rate')
-            ax.set_title(f"ROC  Model: {input.stringM()}, AUC={round(roc_auc,3)}")
+            ax.set_title(f"ROC  Model: {input.stringM()}, AUC={round(roc_auc,5)}")
             return plt.draw()
         if (input.regplotR() == 'Leverage'):
             if(mdl_type()!= 'OLS'): return
