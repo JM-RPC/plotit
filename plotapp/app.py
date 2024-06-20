@@ -19,12 +19,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sb
 from mpl_toolkits.mplot3d import Axes3D
-import plotly.express as pltx
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo
 import shinywidgets
 from shinywidgets import render_widget, output_widget
-import plotly.express as pltx
 import plotly.graph_objs as go
 import os
 import signal
@@ -256,6 +254,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         return
     
     def pushlog2(newlogstr):
+        # with reactive.isolate():
+        #     logstr.set(logstr() + '\n ****'  + newlogstr)
         return    
     
     def pushlog(newlogstr):
@@ -708,11 +708,11 @@ def server(input: Inputs, output: Outputs, session: Session):
             ttlstr = input.titleplt()
         if (cv != None):
             nucolor ,nupatches, colorD = getcolor(list(dfg[cv].astype('str'))) #fix tup color map
-            colormap = {str(item) : f"rgb({int(250*float(colorD[item][0]))},{int(250*float(colorD[item][1]))},{int(250*float(colorD[item][2]))})" for item in colorD.keys() }
-            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, color = list(dfg[cv].astype('str')), color_discrete_map = colormap, width = 900, height = 600, title = ttlstr)
+            fig = go.Figure(data = go.Scatter3d(x=dfg[xv],y=dfg[yv],z=dfg[zv],mode='markers',marker= dict(color=nucolor)))
         else:
-            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, width = 900, height = 900, title = ttlstr)
+            fig = go.Figure(data = go.Scatter3d(x=dfg[xv],y=dfg[yv],z=dfg[zv],mode='markers'))
         fig.layout.scene.aspectratio = {'x':1, 'y':1, 'z':1}
+        fig.update_layout(autosize = False,width = 900, height=900,title = ttlstr)
         fig.update_traces(marker = dict(size = int(input.sl1()/5 +1))) # fix up dot size
         if trendOn():
             if  "Show Trend" in input.scttropts(): 
@@ -731,7 +731,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         if (w1v != '-'):
             dfg = dfg.dropna(subset = [w1v]) #get rid fo rows with na's in the columns to be plotted
             if (input.w1mark() == 'dot'):
-                fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w1v],marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
+                fig.add_trace(go.Scatter3d(x = dfg[xv], y = dfg[yv], z = dfg[w1v],mode = 'markers', marker = dict(size = int(input.sl1()/5 +1),color = input.w1col())))
                 pushlog2(f"...3D extra plot #1 variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
             elif (input.w1mark() == 'line'):
                 pushlog2(f"...3D extra plot #1  variable= {input.w1var()} color = {input.w1col()} NOTE: missing values are dropped.")
