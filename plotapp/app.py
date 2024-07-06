@@ -90,34 +90,55 @@ app_ui = ui.page_navbar(
                      ),
                  ui.row(ui.output_ui("grphopts"),
                      ),
-                 ui.row(
-                     ui.input_selectize("fvar","Filter On:" ,choices = ['-'], multiple=False),
-                     ui.input_selectize("fitems","Included Rows:",choices = ['-'], multiple=True),
-                     ),
-                 ui.row(
-                        ui.HTML("<p>Rows Selected (filter on \"-\" above to clear filter).</p>"),
-                     ),
-                 ui.row(
-                     ui.output_text_verbatim("log")
-                     ),
-                 ui.row(
-                        ui.input_text("titleplt","Plot Title:", value = '-', width = '800px', )
-                     ),
-                 ui.row(ui.HTML("<p>These bounds override plot bounds.  To reset reselect the variable.</p>")
-                     ),
-                 ui.row(
+                 ),
+    ui.nav_panel("Plotting Tools",
+                ui.row(ui.HTML("<p><h4><b>Filters:</b> (filter on \"-\" to clear filter)</h4></p>")),
+                ui.row(ui.HTML("<h4>Range Filter (numerical variables only, missing data will be filtered out):</h4>")),
+                ui.row(
+                    ui.input_selectize("rfvar","Filter On:" ,choices = ['-'], multiple=False),
+                    ui.input_numeric("rflo", "Lower Bound:", value = 0.0, width = '300px'),
+                    ui.input_numeric("rfhi", "Upper Bound:", value = 0.0, width = '300px'),
+                    #ui.input_selectize("fitems","Included Rows:",choices = ['-'], multiple=True),
+                    ),
+                ui.row(
+                    ui.HTML("<p>Current Active Ranges:</p>"),
+                ),
+                ui.row(
+                    ui.output_text_verbatim("rlog")
+                ),
+
+                ui.row(
+                    ui.HTML("<h4>Categorical Filter:</h4>")
+                ),
+                ui.row(
+                    ui.input_selectize("fvar","Filter On:" ,choices = ['-'], multiple=False),
+                    ui.input_selectize("fitems","Included Rows:",choices = ['-'], multiple=True),
+                ),
+                ui.row(
+                    ui.HTML("<p>Rows Selected:</p>"),
+                ),
+                ui.row(
+                    ui.output_text_verbatim("log")
+                ),
+                ui.row(
+                    ui.HTML("<p><h4><b> Plot Customization: </b> </h4></p>")
+                ),   
+                ui.row(
+                    ui.input_text("titleplt","Plot Title:", value = '-', width = '800px', )
+                ),
+                ui.row(ui.HTML("<p>These bounds override plot bounds.  To reset, reselect the variable.</p>")
+                    ),
+                ui.row(
                      ui.column(2,offset=0,*[ ui.input_numeric("xlb", "X lower bound:", value="",width=10)]),
                      ui.column(2,offset=0,*[ ui.input_numeric("xub", "X upper bound:", value="",width=10)]),
                      ui.column(2,offset=0,*[ ui.input_numeric("ylb", "Y lower bound:", value="",width=10)]),
                      ui.column(2,offset=0,*[ ui.input_numeric("yub", "Y upper bound:", value="",width=10)]),
                      ui.column(2,offset=0,*[ ui.input_numeric("zlb", "Z lower bound:", value="",width=10)]),
                      ui.column(2,offset=0,*[ ui.input_numeric("zub", "Z upper bound:", value="",width=10)]),
-                     ),
-                 ),
-    ui.nav_panel("Plot Extras",
-                   ui.row(ui.HTML("<p> Additional data series:</p>"),
+                    ),                 
+                ui.row(ui.HTML("<p><h4><b> Additional Data Series:</b></h4></p>"),
                       ),
-                   ui.row(
+                ui.row(
                        ui.column(2,offset=0,*[ ui.input_selectize("w1var","W1 variable:",choices = ['-'], multiple=False)]),
                        ui.column(2,offset=0,*[ ui.input_selectize("w2var","W2 variable:",choices = ['-'], multiple=False)]),
                        ui.column(2,offset=0,*[ ui.input_selectize("w3var","W3 variable:",choices = ['-'], multiple=False)]),
@@ -125,7 +146,7 @@ app_ui = ui.page_navbar(
                        ui.column(2,offset=0,*[ ui.input_selectize("w5var","W5 variable:",choices = ['-'], multiple=False)]),
                        ui.column(2,offset=0,*[ ui.input_selectize("w6var","W6 variable:",choices = ['-'], multiple=False)]),
                        ),
-                    ui.row(
+                ui.row(
                         ui.column(2,offset=0,*[ ui.input_radio_buttons("w1mark","Type:",choices = ['dot','line'],inline = True)]),                    
                         ui.column(2,offset=0,*[ ui.input_radio_buttons("w2mark","Type:",choices = ['dot','line'],inline = True)]),
                         ui.column(2,offset=0,*[ ui.input_radio_buttons("w3mark","Type:",choices = ['dot','line'],inline = True)]),
@@ -133,7 +154,7 @@ app_ui = ui.page_navbar(
                         ui.column(2,offset=0,*[ ui.input_radio_buttons("w5mark","Type:",choices = ['dot','line'],inline = True)]),
                         ui.column(2,offset=0,*[ ui.input_radio_buttons("w6mark","Type:",choices = ['dot','line'],inline = True)]),
                         ),
-                   ui.row(
+                ui.row(
                        ui.column(2,offset=0,*[ ui.input_selectize("w1col","Color:",choices = basecolors0, multiple = False)]),                    
                        ui.column(2,offset=0,*[ ui.input_selectize("w2col","Color:",choices = basecolors0, multiple = False)]),                    
                        ui.column(2,offset=0,*[ ui.input_selectize("w3col","Color:",choices = basecolors0, multiple = False)]),                    
@@ -141,10 +162,10 @@ app_ui = ui.page_navbar(
                        ui.column(2,offset=0,*[ ui.input_selectize("w5col","Color:",choices = basecolors0, multiple = False)]),                    
                        ui.column(2,offset=0,*[ ui.input_selectize("w6col","Color:",choices = basecolors0, multiple = False)]),                    
                        ),
-                   ui.row(
+                ui.row(
                        ui.column(2,offset=0,*[ ui.input_numeric("siglev", "Significance Level:", value="0.05",width=20)]),
                        ),
-                   ),
+                ),
     
     ui.nav_panel("Data View",
                  #ui.input_file("file1", "Choose .csv or .dta File", accept=[".csv",".CSV",".dta",".DTA"], multiple=False, width = "500px", placeholder = ''),
@@ -220,7 +241,8 @@ def server(input: Inputs, output: Outputs, session: Session):
     mdl_indvar = reactive.value(())
     mdl_stringM = reactive.value(" - ~ ")
     mdl_data = reactive.value(pd.DataFrame())
-    subdict = reactive.value({})
+    subdict = reactive.value({}) #dictionary containing active row entries for each factor column column (maximum of max_factor_values unique entries.)
+    rngdict = reactive.value({}) #dictionary containing active ranges for each numerical column
     logstr = reactive.value("")
     dbgstr = reactive.value(f"At server start: Figures: {plt.get_fignums()} \n")
     plt_msgstr = reactive.value("")
@@ -254,8 +276,9 @@ def server(input: Inputs, output: Outputs, session: Session):
         return
     
     def pushlog2(newlogstr):
+        #print(newlogstr)
         # with reactive.isolate():
-        #     logstr.set(logstr() + '\n ****'  + newlogstr)
+        #     logstr.set(logstr() + '\n' + '***' + newlogstr)
         return    
     
     def pushlog(newlogstr):
@@ -424,12 +447,17 @@ def server(input: Inputs, output: Outputs, session: Session):
         newdict = {item: list(map(str,list(df[item].unique()))) for item in fct_var}
         subdict.set(newdict)
         num_fct = [item for item in list(df.columns) if (item in num_var) and len(list(df[item].unique())) <= max_factor_values]
+        newRdict = {}
+        newRdict = {item: [df[item].min(),df[item].max()] for item in num_var}
+        rngdict.set(newRdict)
+        ui.update_numeric("rfvar", value = '-')
         pushlog("...Initializing plotting data.")
         ui.update_selectize("xvar",choices = ['-']+num_var)
         ui.update_selectize("yvar",choices = ['-']+num_var)
         ui.update_selectize("zvar",choices = ['-']+num_var)
         ui.update_selectize("cvar",choices = ['-']+fct_var)
         ui.update_selectize("fvar",choices = ['-']+fct_var)
+        ui.update_selectize("rfvar",choices = ['-'] + num_var)
         ui.update_selectize("corrV", choices = num_var, selected = None)
         #if (input.datachoose() == 'Input Data'):
         if 1 >0 :
@@ -454,64 +482,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         pushlog2("...setupPlot returning")  
         return
     
-    #event observer to update subsetting dictionary
-    @reactive.effect
-    @reactive.event(input.fvar)
-    def newfilter():
-        df = plt_data()
-        pushlog2("newfilter()")
-        if len(df) == 0: return
-        #if fvar is not set, restore all rows
-        if (input.fvar() == '-'): 
-            pushlog2("...Resetting row filter, all rows active.")
-            #fct used for subsetting (fct short for factor)
-            cols = list(df.columns)
-            num_var = list(df.select_dtypes(include=np.number).columns)
-            fct_var = [item for item in cols if ((item not in num_var) or (len(list(df[item].unique()))<=max_factor_values))]
-            #fctc_var = [item for item in fct_var if (len(list(df[item].unique()))<=5)]#10
-            fct_var.insert(0,"-")
-            #fctc_var.insert(0,"-")
-            newdict = {}
-            newdict = {item: list(map(str,list(df[item].unique()))) for item in fct_var if item != '-'}
-            subdict.set(newdict)
-            ui.update_selectize("fitems",choices = [], selected = [])
-            return
-        fv = input.fvar()
-        inc_items = list(df[fv].astype('str').unique())
-        ui.update_selectize("fitems", choices = inc_items, selected = inc_items)
 
-    @reactive.effect
-    @reactive.event(input.fitems)
-    def subdict_update():
-        pushlog2("subdict_update()")
-        #update the dictionary of currently active rows keys=col names values = lists of active row values
-        fv = input.fvar()
-        if (fv == '-'): return
-        newdict = subdict()
-        newdict[fv] = list(input.fitems())
-        subdict.set(newdict)
-        pushlog(f"...Plot dictionary update:  Var = {fv}; Active values: {', '.join(newdict[fv])}")
 
-    #displays log of currently active rows
-    @render.text
-    @reactive.event(input.updateB,input.fvar,input.xvar, input.yvar, input.zvar, input.cvar)
-    def log(): 
-        if (plt_data().empty): return
-        df = plt_data()
-        cols = df.columns
-         #take out the rows that the user has decided to ignore
-        for item in list(subdict().keys()):
-            df = df[df[item].astype('str').isin(list(subdict()[item]))]
-        num_var = list(df.select_dtypes(include=np.number).columns)
-        fct_var = [item for item in cols if ((item not in num_var) or (len(list(df[item].unique()))<=max_factor_values))]
-        newdict = {}
-        newdict = {item: list(map(str,list(df[item].unique()))) for item in fct_var} 
-        pushlog2("log(): show active rows")
-        if 1==1: #input.fvar() != '-':
-            return '\n'.join([f'{item}: {newdict[item]}' for item in newdict.keys()])
-        else:
-            return ""
-        
     @reactive.effect    
     @reactive.event(input.xvar)
     def do_xvar():
@@ -692,6 +664,8 @@ def server(input: Inputs, output: Outputs, session: Session):
          #take out the rows that the user has decided to ignore
         for item in list(subdict().keys()):
             df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        for item in list(rngdict().keys()):
+            df = df[(df[item]>=rngdict()[item][0]) & (df[item]<=rngdict()[item][1])]
         nrow0 = len(df)
         dfg = df.dropna(subset = [xv, yv, zv]) #get rid fo rows with na's in the columns to be plotted
         nrow = len(dfg)
@@ -807,9 +781,12 @@ def server(input: Inputs, output: Outputs, session: Session):
             squidgeY = (input.yub()-input.ylb())*squidgeVal
         #create the row subset for plotting     
         for item in list(subdict().keys()):
-           df = df[df[item].astype('str').isin(list(subdict()[item]))]
+            df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        nrow0 = len(df)
+        for item in list(rngdict().keys()):
+            df = df[(df[item]>=rngdict()[item][0]) & (df[item]<=rngdict()[item][1])]
         nrow1 = len(df)
-        pushlog(f"...{totrow-nrow1} rows excluded via filter.")
+        pushlog(f"...{totrow-nrow0} rows excluded via category filter,  {nrow0-nrow1} via value filter.")
         #drop rows that have NaN values in the columns to be plotted
         sbst = [xv]
         if yv != '-': sbst.append(yv)
@@ -940,7 +917,121 @@ def server(input: Inputs, output: Outputs, session: Session):
         #create the row subset for graphing    
         for item in list(subdict().keys()):
             df = df[df[item].astype('str').isin(list(subdict()[item]))]
+        for item in list(rngdict().keys()):
+            df = df[(df[item]>=rngdict()[item][0]) & (df[item]<=rngdict()[item][1])]
         yield df.to_csv(index = False)
+
+##########################################################################
+####  Plotting Tools panel
+##########################################################################
+    #event observer to update subsetting dictionary
+    @reactive.effect
+    @reactive.event(input.fvar)
+    def newfilter():
+        df = plt_data()
+        pushlog2("newfilter()")
+        if len(df) == 0: return
+        #if fvar is not set, restore all rows
+        if (input.fvar() == '-'): 
+            pushlog2("...Resetting row filter, all rows active.")
+            #fct used for subsetting (fct short for factor)
+            cols = list(df.columns)
+            num_var = list(df.select_dtypes(include=np.number).columns)
+            fct_var = [item for item in cols if ((item not in num_var) or (len(list(df[item].unique())) <= max_factor_values))]
+            #fctc_var = [item for item in fct_var if (len(list(df[item].unique()))<=5)]#10
+            fct_var.insert(0,"-")
+            #fctc_var.insert(0,"-")
+            newdict = {}
+            newdict = {item: list(map(str,list(df[item].unique()))) for item in fct_var if item != '-'}
+            subdict.set(newdict)
+            ui.update_selectize("fitems",choices = [], selected = [])
+            return
+        #fvar is set, update filtering variable and set filter items (choices)
+        fv = input.fvar()
+        inc_items = list(df[fv].astype('str').unique())
+        ui.update_selectize("fitems", choices = inc_items, selected = inc_items)
+
+    @reactive.effect
+    @reactive.event(input.fitems)
+    def subdict_update():
+        pushlog2("subdict_update()")
+        #update the dictionary of currently active rows keys=col names values = lists of active row values
+        fv = input.fvar()
+        if (fv == '-'): return
+        newdict = subdict()
+        newdict[fv] = list(input.fitems())
+        subdict.set(newdict)
+        pushlog(f"...Plot dictionary update:  Var = {fv}; Active values: {', '.join(newdict[fv])}")
+
+    @reactive.effect
+    @reactive.event(input.rfvar)
+    def clear_rangefilter():
+        if plt_data().empty: return
+        df = plt_data()
+        num_var = list(df.select_dtypes(include=np.number).columns)
+        if input.rfvar() == '-':
+            #clear all range filters
+            newRdict = {}
+            newRdict = {item: (df[item].min(),df[item].max()) for item in num_var}
+            rngdict.set(newRdict)
+            ui.update_numeric("rflo", value = 0)
+            ui.update_numeric("rfhi", value = 0)
+        else:
+            currdict = rngdict()
+            ui.update_numeric("rflo", value = currdict[input.rfvar()][0])
+            ui.update_numeric("rfhi", value = currdict[input.rfvar()][1])
+        return
+    
+    @reactive.effect    
+    @reactive.event(input.rflo, input.rfhi)
+    def do_ranges():
+        if plt_data().empty: return
+        if input.rfvar() == '-': return
+        df = plt_data()
+        num_var = list(df.select_dtypes(include=np.number).columns)
+        if input.rfvar() == '-': 
+            #clear all range filters
+            newRdict = {}
+            newRdict = {item: [df[item].min(),df[item].max()] for item in num_var}
+            rngdict.set(newRdict)
+            print('\n'.join([f'{item}: {rngdict()[item]}' for item in rngdict().keys()]))
+            ui.update_numeric("rflo", value = 0)
+            ui.update_numeric("rfhi",value = 0)
+            return
+        df = plt_data()
+        curdict = rngdict()
+        curdict[input.rfvar()] = [input.rflo(), input.rfhi()]
+        #curdict[input.rfvar()][1] = input.rfhi()
+        ui.update_numeric("rflo", value = curdict[input.rfvar()][0])
+        ui.update_numeric("rfhi", value = curdict[input.rfvar()][1])
+
+        rngdict.set(curdict)
+        pushlog(f"updating data ranges: column = {input.rfvar()}, entry: [{rngdict()[input.rfvar()][0]},{rngdict()[input.rfvar()][1]}]")
+        
+        #ui.update_numeric("xlb",value = min(df[input.xvar()]))
+        #ui.update_numeric("xub",value = max(df[input.xvar()]))
+    
+    # @reactive.effect
+    # @reactive.event(input.rfvar)
+    # def do_refvar():
+
+    #displays log of currently active rows
+    @render.text
+    @reactive.event(input.updateB,input.fvar,input.fitems)
+    def log(): 
+        if (plt_data().empty): return
+        pushlog2("log(): show active rows")
+        pushlog2('\n'.join([f'{item}: {subdict()[item]}' for item in subdict().keys()]))
+        return '\n'.join([f'{item}: {subdict()[item]}' for item in subdict().keys()])
+        
+    @render.text
+    @reactive.event(input.updateB,input.rfvar,input.rflo, input.rfhi)
+    def rlog(): 
+        if (plt_data().empty): return
+        pushlog2("rlog(): current ranges")
+        pushlog2('\n'.join([f'{item}: {rngdict()[item]}' for item in rngdict().keys()]))
+        #print("rlog: show current row ranges.")
+        return '\n'.join([f'{item}: {rngdict()[item]}' for item in rngdict().keys()])
         
 ##########################################################################
 ####  Linear Models panel
@@ -988,6 +1079,10 @@ def server(input: Inputs, output: Outputs, session: Session):
         for item in list(subdict().keys()):
             df = df[df[item].astype('str').isin(list(subdict()[item]))]
         size1 = len(df)
+        #  apply the row range filters
+        for item in list(rngdict().keys()):
+            df = df[(df[item]>=rngdict()[item][0]) & (df[item]<=rngdict()[item][1])]
+        size1b = len(df)
         #create factors for numerical variables as set by user by changing them into strings
         if len(input.tofactor()) >0 :
             pushlog(f"runModel: Creating factors for: {', '.join(input.tofactor())}")
@@ -997,7 +1092,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         df.dropna(subset = [input.depvar()] + list(input.indvar()),inplace = True)   
         size2 = len(df)   
         #check to see if the dependent variable is binary (use logit) has several outcomes (use ols) or just one (quit)
-        pushlog(f".... {size0-size1} rows deleted by filter, {size1-size2} rows deleted due to missing data.")        
+        pushlog(f".... {size0-size1} rows deleted by categorical filter, \n.... {size1-size1b} deleted by range filter, \n.... {size1b-size2} deleted due to missing data.")        
         #minimal sanity check: a) dependent variable can't be constant b) if LOGIT has been chosen, dependent variable must be binary (0 or 1)
         outcomes = list(df[input.depvar()].unique())
         ISINT = False
