@@ -24,6 +24,7 @@ from shiny.types import FileInfo
 import shinywidgets
 from shinywidgets import render_widget, output_widget
 import plotly.graph_objs as go
+import plotly.express as pltx
 import os
 import signal
 from datetime import datetime
@@ -531,7 +532,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 trendOn.set(True)
                 return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB3", "Update")]),
-                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 75, value = 10)]),
                               ui.column(1,offset = 0,),
                               ui.column(4,offset=0,*[ui.input_checkbox_group("scttropts","3D Scatter Plot Options:",
                                                 choices=('Show Trend','CI','PI'),selected=(),inline = True)])
@@ -540,7 +541,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 trendOn.set(False)
                 return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
-                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 75, value = 10)]),
                               #ui.column(1,offset = 0,),
                               #ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
                               #                                      choices=('Show Trend','CI','PI'),selected=(),inline = True)])
@@ -550,7 +551,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 trendOn.set(True)
                 return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
-                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 75, value = 10)]),
                               ui.column(1,offset = 0,),
                               ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
                                                                     choices=('Show Trend','CI','PI'),selected=(),inline = True)])
@@ -559,7 +560,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 trendOn.set(False)
                 return ui.TagList(
                               #ui.column(1,offset = 0,*[ui.input_action_button("updateB12", "Update")]),
-                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 40, value = 10)]),
+                              ui.column(3,offset=0,*[ui.input_slider("sl1","# dotsize",min = 0, max = 75, value = 10)]),
                               #ui.column(1,offset = 0,),
                               #ui.column(2,offset=0,*[ui.input_checkbox_group("scttropts","Scatter Plot Options:",
                               #                                      choices=('Show Trend','CI','PI'),selected=(),inline = True)])
@@ -678,11 +679,13 @@ def server(input: Inputs, output: Outputs, session: Session):
         else:
             ttlstr = f"File: {input.file1()[0]['name']}:  {nrow} rows plotted out of {totrow} "
             pushlog(f"...plot3: {totrow-nrow0} rows filtered out, {nrow0-nrow} rows removed due to missing data.")
-        if input.titleplt() != "-" :
+        if input.titleplt() != "-" : 
             ttlstr = input.titleplt()
         if (cv != None):
             nucolor ,nupatches, colorD = getcolor(list(dfg[cv].astype('str'))) #fix tup color map
-            fig = go.Figure(data = go.Scatter3d(x=dfg[xv],y=dfg[yv],z=dfg[zv],mode='markers',marker= dict(color=nucolor)))
+            colormap = {str(item) : f"rgb({int(250*float(colorD[item][0]))},{int(250*float(colorD[item][1]))},{int(250*float(colorD[item][2]))})" for item in colorD.keys() }
+            fig = pltx.scatter_3d(dfg,x=xv, y= yv, z = zv, color = list(dfg[cv].astype('str')), color_discrete_map = colormap, width = 900, height = 600, title = ttlstr)
+            #fig = go.Figure(data = go.Scatter3d(x=dfg[xv],y=dfg[yv],z=dfg[zv],mode='markers',marker= dict(color=nucolor),showlegend = True))
         else:
             fig = go.Figure(data = go.Scatter3d(x=dfg[xv],y=dfg[yv],z=dfg[zv],mode='markers'))
         fig.layout.scene.aspectratio = {'x':1, 'y':1, 'z':1}
