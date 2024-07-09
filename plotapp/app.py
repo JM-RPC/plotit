@@ -67,8 +67,9 @@ app_ui = ui.page_navbar(
     ui.nav_panel("Plotting",
                  ui.row(
                      ui.column(4,offset = 0,*[ui.input_file("file1", "Choose .csv or .dta File", accept=[".csv",".CSV",".dta",".DTA"], multiple=False, placeholder = '', width = "600px")]),
-                     ui.column(4,offset = 0,*[ui.input_radio_buttons('killna', 'On input remove rows with missing data in one or more columns?',choices = ['No','Yes'],inline = True)]),
-                     ui.column(4,offset = 0,),
+                     ui.column(3,offset = 0,*[ui.input_radio_buttons('killna', 'On input remove rows with missing data in one or more columns?',choices = ['No','Yes'],inline = True)]),
+                     ui.column(2,offset = 0,),
+                     ui.column(3,offset = 0,*[ui.a("Documentation", href="https://github.com/JM-RPC/plotit/blob/main/plotit_documentation.pdf",target="_blank")]),
                      ),
                  ui.row(
                      ui.output_text("plt_mess",inline = True)
