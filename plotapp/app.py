@@ -1096,20 +1096,20 @@ def server(input: Inputs, output: Outputs, session: Session):
         df.dropna(subset = [input.depvar()] + list(input.indvar()),inplace = True)   
         size2 = len(df)   
         #check to see if the dependent variable is binary (use logit) has several outcomes (use ols) or just one (quit)
-        pushlog(f".... {size0-size1} rows deleted by categorical filter, \n.... {size1-size1b} deleted by range filter, \n.... {size1b-size2} deleted due to missing data.")        
+        pushlog(f".Rows read in: {size0},... {size0-size1} rows deleted by categorical filter, \n.... {size1-size1b} deleted by range filter, \n.... {size1b-size2} deleted due to missing data.")        
         #minimal sanity check: a) dependent variable can't be constant b) if LOGIT has been chosen, dependent variable must be binary (0 or 1)
         outcomes = list(df[input.depvar()].unique())
-        ISINT = False
-        if df[input.depvar()].dtype == 'int':
-            ISINT = True
-        elif df[input.depvar()].dtype == 'float':
-            if (df[input.depvar()].apply(float.is_integer).all()):
-                ISINT = True
-            else:
-                ISINT = False
-        else: 
-            ISINT = False
-        pushlog(f"...Dependent variable type: {df[input.depvar()].dtype}; ISINT = {ISINT}")
+        #ISINT = False
+        #if df[input.depvar()].dtype == 'int':
+        #    ISINT = True
+        #elif df[input.depvar()].dtype == 'float':
+        #    if (df[input.depvar()].apply(float.is_integer).all()):
+        #        ISINT = True
+        #    else:
+        #        ISINT = False
+        #else: 
+        #    ISINT = False
+        pushlog(f"...Dependent variable type: {df[input.depvar()].dtype}")
         no_outcomes = len(outcomes)
         if (no_outcomes <=1):
             pushlog("The dependent variable is a constant.  I'm confused.  Please check and try again.")
